@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Star, ShieldCheck, CreditCard, Mail, MapPin, Menu, X, CheckSquare, DollarSign, MessageSquareHeart } from 'lucide-react';
+import { LayoutDashboard, Star, ShieldCheck, CreditCard, Mail, MapPin, Menu, X, CheckSquare, DollarSign, MessageSquareHeart, Briefcase } from 'lucide-react';
 import { ViewState } from '../types';
 
 interface SidebarProps {
@@ -8,20 +8,26 @@ interface SidebarProps {
   isMobileOpen: boolean;
   setIsMobileOpen: (open: boolean) => void;
   isClientView: boolean;
+  siteName?: string;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isMobileOpen, setIsMobileOpen, isClientView }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isMobileOpen, setIsMobileOpen, isClientView, siteName }) => {
   
   // Different nav items based on View Mode
   const navItems = isClientView 
   ? [
       { id: 'dashboard' as ViewState, label: 'Project Overview', icon: <LayoutDashboard size={20} /> },
+      { id: 'portfolio' as ViewState, label: 'Portfolio / About', icon: <Briefcase size={20} /> },
+      { id: 'google' as ViewState, label: 'Google Reviews', icon: <Star size={20} /> },
+      { id: 'trustpilot' as ViewState, label: 'Trustpilot', icon: <ShieldCheck size={20} /> },
       { id: 'tasks' as ViewState, label: 'My Tasks', icon: <CheckSquare size={20} /> },
-      { id: 'feedback' as ViewState, label: 'Community Trust', icon: <MessageSquareHeart size={20} /> },
+      { id: 'address' as ViewState, label: 'My Address', icon: <MapPin size={20} /> },
+      { id: 'feedback' as ViewState, label: 'Leave Feedback', icon: <MessageSquareHeart size={20} /> },
     ]
   : [
       { id: 'dashboard' as ViewState, label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
       { id: 'tasks' as ViewState, label: 'Tasks', icon: <CheckSquare size={20} /> },
+      { id: 'portfolio' as ViewState, label: 'Portfolio', icon: <Briefcase size={20} /> },
       { id: 'google' as ViewState, label: 'Google Reviews', icon: <Star size={20} /> },
       { id: 'trustpilot' as ViewState, label: 'Trustpilot', icon: <ShieldCheck size={20} /> },
       { id: 'payments' as ViewState, label: 'Payments', icon: <CreditCard size={20} /> },
@@ -46,8 +52,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, i
 
       <div className={`${baseClasses} ${mobileClasses} flex flex-col shadow-xl`}>
         <div className={`h-16 flex items-center justify-between px-6 ${isClientView ? 'bg-indigo-950' : 'bg-slate-950'}`}>
-          <h1 className="text-xl font-bold tracking-wider text-emerald-400">
-            {isClientView ? 'Client Portal' : 'FreelanceHub'}
+          <h1 className="text-sm font-bold tracking-wider text-emerald-400 truncate leading-tight">
+            {siteName || (isClientView ? 'Client Portal' : 'FreelanceHub')}
           </h1>
           <button onClick={() => setIsMobileOpen(false)} className="lg:hidden text-slate-400 hover:text-white">
             <X size={24} />

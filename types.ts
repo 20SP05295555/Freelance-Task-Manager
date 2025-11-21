@@ -3,6 +3,7 @@ export type Status = 'Live' | 'Drop' | 'Invoice Approved' | 'Pending';
 export type PaymentStatus = 'Paid' | 'Unpaid' | 'Pending';
 export type TaskStatus = 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
 export type TaskPriority = 'Low' | 'Medium' | 'High';
+export type AdvanceType = 'Received' | 'Repaid';
 
 export interface Client {
   id: string;
@@ -51,6 +52,15 @@ export interface Payment {
   note: string;
 }
 
+export interface AdvanceTransaction {
+  id: string;
+  clientId: string;
+  date: string;
+  amount: number;
+  type: AdvanceType; // Received = Taking money, Repaid = Returning/Adjusting
+  note: string;
+}
+
 export interface GmailAccount {
   id: string;
   clientId: string;
@@ -78,6 +88,7 @@ export interface Task {
   dueDate: string;
   status: TaskStatus;
   priority: TaskPriority;
+  dependencies?: string[];
 }
 
 export interface Expense {
@@ -96,4 +107,26 @@ export interface ClientFeedback {
   date: string;
 }
 
-export type ViewState = 'dashboard' | 'google' | 'trustpilot' | 'payments' | 'gmail' | 'address' | 'tasks' | 'expenses' | 'feedback';
+export interface Project {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl?: string;
+  link?: string;
+  tags: string[];
+}
+
+export interface PortfolioProfile {
+  name: string;
+  title: string;
+  bio: string;
+  profileImage: string;
+  skills: string[];
+  projects: Project[];
+}
+
+export interface AppSettings {
+  siteName: string;
+}
+
+export type ViewState = 'dashboard' | 'google' | 'trustpilot' | 'payments' | 'gmail' | 'address' | 'tasks' | 'expenses' | 'feedback' | 'portfolio' | 'settings';
