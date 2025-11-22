@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Star, ShieldCheck, CreditCard, Mail, MapPin, Menu, X, CheckSquare, DollarSign, MessageSquareHeart, Briefcase } from 'lucide-react';
+import { LayoutDashboard, Star, ShieldCheck, CreditCard, Mail, MapPin, Menu, X, CheckSquare, DollarSign, MessageSquareHeart, Briefcase, Bot, Bell } from 'lucide-react';
 import { ViewState } from '../types';
 
 interface SidebarProps {
@@ -9,14 +9,16 @@ interface SidebarProps {
   setIsMobileOpen: (open: boolean) => void;
   isClientView: boolean;
   siteName?: string;
+  unreadCount?: number;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isMobileOpen, setIsMobileOpen, isClientView, siteName }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isMobileOpen, setIsMobileOpen, isClientView, siteName, unreadCount = 0 }) => {
   
   // Different nav items based on View Mode
   const navItems = isClientView 
   ? [
       { id: 'dashboard' as ViewState, label: 'Project Overview', icon: <LayoutDashboard size={20} /> },
+      { id: 'notifications' as ViewState, label: 'Notifications', icon: <Bell size={20} />, badge: unreadCount > 0 ? unreadCount : 0 },
       { id: 'portfolio' as ViewState, label: 'Portfolio / About', icon: <Briefcase size={20} /> },
       { id: 'google' as ViewState, label: 'Google Reviews', icon: <Star size={20} /> },
       { id: 'trustpilot' as ViewState, label: 'Trustpilot', icon: <ShieldCheck size={20} /> },
@@ -27,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, i
   : [
       { id: 'dashboard' as ViewState, label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
       { id: 'tasks' as ViewState, label: 'Tasks', icon: <CheckSquare size={20} /> },
+      { id: 'ai_comms' as ViewState, label: 'AI Email Studio', icon: <Bot size={20} /> },
       { id: 'portfolio' as ViewState, label: 'Portfolio', icon: <Briefcase size={20} /> },
       { id: 'google' as ViewState, label: 'Google Reviews', icon: <Star size={20} /> },
       { id: 'trustpilot' as ViewState, label: 'Trustpilot', icon: <ShieldCheck size={20} /> },
@@ -68,20 +71,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, i
                 setCurrentView(item.id);
                 setIsMobileOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 relative ${
                 currentView === item.id 
                   ? 'bg-emerald-600 text-white shadow-md' 
                   : 'text-slate-300 hover:bg-slate-800 hover:text-white'
               }`}
             >
               {item.icon}
-              <span className="font-medium">{item.label}</span>
+              <span className="font-medium flex-1 text-left">{item.label}</span>
+              {item.badge && item.badge > 0 ? (
+                <span className="bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
+                  {item.badge}
+                </span>
+              ) : null}
             </button>
           ))}
         </nav>
         
         <div className="p-4 bg-slate-950 text-xs text-slate-500 text-center">
-          {isClientView ? 'Viewing as Client' : 'v1.2.0 • Manager Mode'}
+          {isClientView ? 'Viewing as Client' : 'v1.3.0 • Manager Mode'}
         </div>
       </div>
     </>

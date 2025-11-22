@@ -1,4 +1,5 @@
 
+
 export type Status = 'Live' | 'Drop' | 'Invoice Approved' | 'Pending';
 export type PaymentStatus = 'Paid' | 'Unpaid' | 'Pending';
 export type TaskStatus = 'Pending' | 'In Progress' | 'Completed' | 'On Hold';
@@ -10,7 +11,7 @@ export interface Client {
   name: string;
   note?: string;
   email?: string;
-  password?: string; // In a real app, this should be hashed. Storing plain for this demo tool.
+  pin?: string; // 6-digit PIN for client login
   isInviteAccepted?: boolean;
 }
 
@@ -41,6 +42,8 @@ export interface TrustpilotReview {
   gmailUsed: string;
   passwordUsed: string;
   invoiceNumber?: string;
+  experienceDate?: string;
+  postDate?: string;
 }
 
 export interface Payment {
@@ -129,4 +132,13 @@ export interface AppSettings {
   siteName: string;
 }
 
-export type ViewState = 'dashboard' | 'google' | 'trustpilot' | 'payments' | 'gmail' | 'address' | 'tasks' | 'expenses' | 'feedback' | 'portfolio' | 'settings';
+export interface Notification {
+  id: string;
+  clientId: string;
+  message: string;
+  timestamp: string;
+  isRead: boolean;
+  taskId?: string;
+}
+
+export type ViewState = 'dashboard' | 'google' | 'trustpilot' | 'payments' | 'gmail' | 'address' | 'tasks' | 'expenses' | 'feedback' | 'portfolio' | 'settings' | 'ai_comms' | 'notifications';

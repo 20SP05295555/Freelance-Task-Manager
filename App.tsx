@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ClientSelector } from './components/ClientSelector';
-import { ViewState, Client, GoogleReview, TrustpilotReview, Payment, GmailAccount, Address, Task, Expense, ClientFeedback, AdvanceTransaction, AdvanceType, TaskStatus, TaskPriority, PortfolioProfile, Project, AppSettings } from './types';
+import { LoginScreen } from './components/LoginScreen';
+import { ViewState, Client, GoogleReview, TrustpilotReview, Payment, GmailAccount, Address, Task, Expense, ClientFeedback, AdvanceTransaction, AdvanceType, TaskStatus, TaskPriority, PortfolioProfile, Project, AppSettings, Notification } from './types';
 import { dataService } from './services/dataService';
-import { Menu, Plus, Trash2, Copy, Wand2, LogOut, UserCheck, Eye, EyeOff, Link as LinkIcon, Send, Lock, Mail, Star, CreditCard, Users, ShieldCheck, MapPin, CheckSquare, DollarSign, TrendingDown, TrendingUp, AlertCircle, Clock, ArrowRight, Briefcase, Edit3, Save, Globe, ExternalLink, X, Settings, AlertTriangle, Link2 } from 'lucide-react';
-import { generateReviewContent } from './services/geminiService';
+import { Menu, Plus, Trash2, Copy, Wand2, LogOut, UserCheck, Eye, EyeOff, Link as LinkIcon, Send, Lock, Mail, Star, CreditCard, Users, ShieldCheck, MapPin, CheckSquare, DollarSign, TrendingDown, TrendingUp, AlertCircle, Clock, ArrowRight, Briefcase, Edit3, Save, Globe, ExternalLink, X, Settings, AlertTriangle, Link2, UploadCloud, Bot, Bell } from 'lucide-react';
+import { generateReviewContent, generateEmailTemplate } from './services/geminiService';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 // --- Constants ---
-const ADMIN_EMAIL = "arponchakrabortty@gmail.com";
-const ADMIN_PASS = "Arponch1149@";
+const ADMIN_PIN = "124442";
 const AUTH_KEY = 'ftm_auth_session';
 
 // --- Types for Local State ---
@@ -19,6 +19,11 @@ interface AuthUser {
   id?: string;
   name?: string;
 }
+
+export type LoginCredentials =
+  | { type: 'admin'; pin: string }
+  | { type: 'client'; clientId: string; pin: string };
+
 
 // Utility to copy text
 const copyToClipboard = (text: string) => {
@@ -30,13 +35,11 @@ const copyToClipboard = (text: string) => {
 const App: React.FC = () => {
   // --- Auth State ---
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPass, setLoginPass] = useState('');
   const [authError, setAuthError] = useState('');
   
   // --- Invite/Setup State ---
   const [inviteClientId, setInviteClientId] = useState<string | null>(null);
-  const [setupPassword, setSetupPassword] = useState('');
+  const [setupPin, setSetupPin] = useState('');
   const [setupConfirm, setSetupConfirm] = useState('');
 
   // --- App State ---
@@ -56,10 +59,17 @@ const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [feedback, setFeedback] = useState<ClientFeedback[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioProfile | null>(null);
   const [settings, setSettings] = useState<AppSettings>({ siteName: "Freelance with Arpon Chakrabortty (Alex)" });
   const [loading, setLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+
+  // --- AI Comms State
+  const [aiEmailType, setAiEmailType] = useState('Invoice Reminder');
+  const [aiEmailContext, setAiEmailContext] = useState('');
+  const [aiGeneratedEmail, setAiGeneratedEmail] = useState<{subject: string, body: string} | null>(null);
 
   // --- Portfolio Edit State ---
   const [isEditingPortfolio, setIsEditingPortfolio] = useState(false);
@@ -82,6 +92,7 @@ const App: React.FC = () => {
     setTasks(dataService.getTasks());
     setExpenses(dataService.getExpenses());
     setFeedback(dataService.getFeedback());
+    setNotifications(dataService.getNotifications());
     setPortfolio(dataService.getPortfolio());
     setSettings(dataService.getSettings());
     
@@ -118,60 +129,65 @@ const App: React.FC = () => {
     }
   }, [clients, activeClientId]);
 
+  // --- Derived State ---
+  const unreadCount = useMemo(() => {
+    if (user?.role !== 'client') return 0;
+    return notifications.filter(n => n.clientId === user.id && !n.isRead).length;
+  }, [notifications, user]);
+
   // --- Auth Handlers ---
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = (credentials: LoginCredentials) => {
     setAuthError('');
 
-    const email = loginEmail.trim();
-    const pass = loginPass; // Passwords can have spaces, though rare
-
     // Admin Check
-    if (email === ADMIN_EMAIL && pass === ADMIN_PASS) {
-      const adminUser: AuthUser = { role: 'admin', name: 'Admin' };
-      setUser(adminUser);
-      localStorage.setItem(AUTH_KEY, JSON.stringify(adminUser));
-      return;
-    }
-
-    // Client Check
-    const client = clients.find(c => 
-      c.email && 
-      c.email.trim().toLowerCase() === email.toLowerCase() && 
-      c.password === pass
-    );
-
-    if (client) {
-      if (!client.isInviteAccepted) {
-        setAuthError('Account not activated yet. Please use the invitation link provided by your manager.');
+    if (credentials.type === 'admin') {
+      if (credentials.pin === ADMIN_PIN) {
+        const adminUser: AuthUser = { role: 'admin', name: 'Admin' };
+        setUser(adminUser);
+        localStorage.setItem(AUTH_KEY, JSON.stringify(adminUser));
         return;
       }
-      const clientUser: AuthUser = { role: 'client', id: client.id, name: client.name };
-      setUser(clientUser);
-      localStorage.setItem(AUTH_KEY, JSON.stringify(clientUser));
-      setActiveClientId(client.id);
-      setCurrentView('dashboard');
-      return;
+    }
+    
+    // Client Check
+    if (credentials.type === 'client') {
+      const { clientId, pin } = credentials;
+      const client = clients.find(c => 
+        c.id === clientId && c.pin === pin
+      );
+
+      if (client) {
+        if (!client.isInviteAccepted) {
+          setAuthError('Account not activated. Please use the invitation link.');
+          return;
+        }
+        const clientUser: AuthUser = { role: 'client', id: client.id, name: client.name };
+        setUser(clientUser);
+        localStorage.setItem(AUTH_KEY, JSON.stringify(clientUser));
+        setActiveClientId(client.id);
+        setCurrentView('dashboard');
+        return;
+      }
     }
 
-    setAuthError('Invalid email or password.');
+    setAuthError('Invalid credentials.');
   };
 
-  const handleSetupPassword = (e: React.FormEvent) => {
+  const handleSetupPin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (setupPassword !== setupConfirm) {
-      setAuthError("Passwords do not match");
+    if (setupPin !== setupConfirm) {
+      setAuthError("PINs do not match");
       return;
     }
-    if (setupPassword.length < 6) {
-      setAuthError("Password must be at least 6 characters");
+    if (setupPin.length !== 6) {
+      setAuthError("PIN must be exactly 6 digits");
       return;
     }
 
     const updatedClients = clients.map(c => {
       if (c.id === inviteClientId) {
-        return { ...c, password: setupPassword, isInviteAccepted: true };
+        return { ...c, pin: setupPin, isInviteAccepted: true };
       }
       return c;
     });
@@ -196,8 +212,6 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem(AUTH_KEY);
-    setLoginEmail('');
-    setLoginPass('');
     setCurrentView('dashboard');
   };
 
@@ -224,6 +238,14 @@ const App: React.FC = () => {
     setFeedbackRating(5);
     alert("Thank you for your feedback!");
   };
+  
+  const handleGenerateEmail = async () => {
+      setIsGenerating(true);
+      setAiGeneratedEmail(null);
+      const result = await generateEmailTemplate(aiEmailType, aiEmailContext);
+      setAiGeneratedEmail(result);
+      setIsGenerating(false);
+  }
 
   // --- Data Handlers ---
 
@@ -248,6 +270,22 @@ const App: React.FC = () => {
   };
 
   // --- Portfolio Handlers ---
+  const handleImageUpload = async (file: File, callback: (base64: string) => void) => {
+      if (file && file.type.startsWith('image/')) {
+          try {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                  callback(reader.result as string);
+              };
+              reader.readAsDataURL(file);
+          } catch (error) {
+              console.error("Error converting image to base64", error);
+              alert("Failed to upload image.");
+          }
+      } else {
+          alert("Please select a valid image file.");
+      }
+  };
   
   const updatePortfolio = (field: keyof PortfolioProfile, value: any) => {
     if (!portfolio) return;
@@ -263,7 +301,7 @@ const App: React.FC = () => {
       title: 'New Project',
       description: 'Project description...',
       tags: ['Tag1'],
-      imageUrl: 'https://via.placeholder.com/400x200',
+      imageUrl: 'https://images.unsplash.com/photo-1556742049-0cfed4f7a07d?fit=crop&w=500&h=300'
     };
     const updated = { ...portfolio, projects: [newProject, ...portfolio.projects] };
     setPortfolio(updated);
@@ -309,34 +347,40 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
           <h2 className="text-2xl font-bold text-slate-800 mb-2">Welcome, {inviteClient.name}</h2>
-          <p className="text-slate-500 mb-6">Please set a secure password to access your dashboard.</p>
+          <p className="text-slate-500 mb-6">Please set a secure 6-digit PIN to access your dashboard.</p>
           
-          <form onSubmit={handleSetupPassword} className="space-y-4">
+          <form onSubmit={handleSetupPin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Create Password</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Create 6-Digit PIN</label>
               <input 
-                type="password" 
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={6}
                 required 
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-emerald-500"
-                value={setupPassword}
-                onChange={e => setSetupPassword(e.target.value)}
-                minLength={6}
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-center text-lg tracking-[8px] font-mono"
+                value={setupPin}
+                onChange={e => setSetupPin(e.target.value)}
+                placeholder="••••••"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Confirm Password</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Confirm PIN</label>
               <input 
-                type="password" 
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={6}
                 required 
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-emerald-500"
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-center text-lg tracking-[8px] font-mono"
                 value={setupConfirm}
                 onChange={e => setSetupConfirm(e.target.value)}
-                minLength={6}
+                placeholder="••••••"
               />
             </div>
             {authError && <p className="text-red-500 text-sm">{authError}</p>}
             <button type="submit" className="w-full bg-emerald-600 text-white py-2 rounded hover:bg-emerald-700 font-medium">
-              Set Password & Access Dashboard
+              Set PIN & Access Dashboard
             </button>
           </form>
         </div>
@@ -346,48 +390,7 @@ const App: React.FC = () => {
 
   // 2. Login Screen
   if (!user) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
-          <div className="flex justify-center mb-6">
-            <div className="bg-emerald-100 p-3 rounded-full">
-              <Lock className="w-8 h-8 text-emerald-600" />
-            </div>
-          </div>
-          <h2 className="text-2xl font-bold text-center text-slate-800 mb-6">{settings.siteName}</h2>
-          
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-              <input 
-                type="email" 
-                required 
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-emerald-500"
-                value={loginEmail}
-                onChange={e => setLoginEmail(e.target.value)}
-                placeholder="Enter your email"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-              <input 
-                type="password" 
-                required 
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-emerald-500"
-                value={loginPass}
-                onChange={e => setLoginPass(e.target.value)}
-                placeholder="Enter your password"
-              />
-            </div>
-            {authError && <p className="text-red-500 text-sm text-center">{authError}</p>}
-            <button type="submit" className="w-full bg-emerald-600 text-white py-2 rounded hover:bg-emerald-700 font-medium transition-colors">
-              Sign In
-            </button>
-          </form>
-          <p className="text-center text-xs text-slate-400 mt-6">Protected Client Access System</p>
-        </div>
-      </div>
-    );
+    return <LoginScreen clients={clients} onLogin={handleLogin} siteName={settings.siteName} authError={authError} setAuthError={setAuthError} />;
   }
 
   // 3. Main App
@@ -470,7 +473,7 @@ const App: React.FC = () => {
                <h3 className="font-semibold text-slate-800 mb-4">Client Access Management</h3>
                {currentClient ? (
                  <div className="space-y-4">
-                    <p className="text-xs text-slate-500">Step 1: Assign Client Email</p>
+                    <p className="text-xs text-slate-500">Step 1: Assign Client Email (Optional, for contact)</p>
                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
                        <div className="flex items-center gap-3 w-full">
                           <Mail className="text-slate-400" size={18} />
@@ -483,7 +486,7 @@ const App: React.FC = () => {
                        </div>
                     </div>
                     
-                    <p className="text-xs text-slate-500 pt-2">Step 2: Send Invitation</p>
+                    <p className="text-xs text-slate-500 pt-2">Step 2: Send Invitation to Setup PIN</p>
                     <div className="flex items-center gap-2">
                       <button 
                         onClick={() => generateInviteLink(currentClient)}
@@ -523,19 +526,29 @@ const App: React.FC = () => {
           <div className="h-32 bg-gradient-to-r from-slate-800 to-indigo-900"></div>
           <div className="px-6 pb-6">
              <div className="flex flex-col md:flex-row items-start md:items-end gap-4 -mt-12">
-               <div className="relative shrink-0">
+               <div className="relative shrink-0 group">
                  <img 
                    src={portfolio.profileImage || "https://via.placeholder.com/150"} 
                    alt="Profile" 
                    className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-white shadow-md object-cover bg-slate-100"
                  />
                  {!isClient && isEditingPortfolio && (
-                    <input 
-                       className="absolute bottom-0 left-0 w-full text-xs bg-white/90 border border-slate-300 rounded px-1"
-                       placeholder="Image URL"
-                       value={portfolio.profileImage}
-                       onChange={e => updatePortfolio('profileImage', e.target.value)}
-                    />
+                    <>
+                      <label htmlFor="profile-image-upload" className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs font-bold cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
+                          <UploadCloud size={24} />
+                      </label>
+                      <input
+                        id="profile-image-upload"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleImageUpload(e.target.files[0], (base64) => updatePortfolio('profileImage', base64));
+                          }
+                        }}
+                      />
+                    </>
                  )}
                </div>
                <div className="flex-1 w-full">
@@ -637,12 +650,22 @@ const App: React.FC = () => {
                     <div className="h-48 bg-slate-100 relative overflow-hidden">
                        <img src={project.imageUrl} alt={project.title} className="w-full h-full object-cover" />
                        {isEditingPortfolio && (
-                          <input 
-                             className="absolute bottom-0 left-0 w-full text-xs bg-black/70 text-white border-none p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                             value={project.imageUrl}
-                             placeholder="Image URL"
-                             onChange={e => updateProject(project.id, 'imageUrl', e.target.value)}
-                          />
+                          <>
+                            <label htmlFor={`project-image-upload-${project.id}`} className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-bold cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                              Change Image
+                            </label>
+                            <input
+                              id={`project-image-upload-${project.id}`}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  handleImageUpload(e.target.files[0], (base64) => updateProject(project.id, 'imageUrl', base64));
+                                }
+                              }}
+                            />
+                          </>
                        )}
                        {project.link && !isEditingPortfolio && (
                          <a href={project.link} target="_blank" rel="noopener noreferrer" className="absolute top-2 right-2 bg-white/90 p-2 rounded-full text-slate-700 hover:text-indigo-600 shadow-sm">
@@ -941,6 +964,7 @@ const App: React.FC = () => {
     const clientReviews = trustpilotReviews.filter(r => r.clientId === activeClientId);
 
     const addReview = () => {
+      const today = new Date().toISOString().split('T')[0];
       const newReview: TrustpilotReview = {
         id: Date.now().toString(),
         clientId: activeClientId,
@@ -953,7 +977,9 @@ const App: React.FC = () => {
         status: 'Pending',
         gmailUsed: '',
         passwordUsed: '',
-        invoiceNumber: ''
+        invoiceNumber: '',
+        experienceDate: today,
+        postDate: today,
       };
       const updated = [newReview, ...trustpilotReviews];
       setTrustpilotReviews(updated);
@@ -1006,6 +1032,16 @@ const App: React.FC = () => {
                                 <label className="text-xs text-slate-500 font-medium uppercase">Content</label>
                                 <textarea className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 resize-y min-h-[60px] mt-1" value={review.content} placeholder="Review content..." onChange={e => updateReview(review.id, 'content', e.target.value)} />
                             </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs text-slate-500 font-medium uppercase">Experience Date</label>
+                                    <input type="date" className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1" value={review.experienceDate || ''} onChange={e => updateReview(review.id, 'experienceDate', e.target.value)} />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-500 font-medium uppercase">Post Date</label>
+                                    <input type="date" className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1" value={review.postDate || ''} onChange={e => updateReview(review.id, 'postDate', e.target.value)} />
+                                </div>
+                            </div>
                             <div>
                                 <label className="text-xs text-slate-500 font-medium uppercase">Invoice #</label>
                                 <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1" value={review.invoiceNumber || ''} placeholder="INV-001" onChange={e => updateReview(review.id, 'invoiceNumber', e.target.value)} />
@@ -1041,6 +1077,8 @@ const App: React.FC = () => {
               <tr>
                 <th className="p-3">Title</th>
                 <th className="p-3 w-1/4">Content</th>
+                <th className="p-3">Experience Date</th>
+                <th className="p-3">Post Date</th>
                 <th className="p-3">Invoice #</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Live Link</th>
@@ -1071,6 +1109,22 @@ const App: React.FC = () => {
                       value={review.content}
                       placeholder="Review content..."
                       onChange={e => updateReview(review.id, 'content', e.target.value)}
+                    />
+                  </td>
+                  <td className="p-3 align-top">
+                    <input
+                      type="date"
+                      className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none"
+                      value={review.experienceDate || ''}
+                      onChange={e => updateReview(review.id, 'experienceDate', e.target.value)}
+                    />
+                  </td>
+                  <td className="p-3 align-top">
+                    <input
+                      type="date"
+                      className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none"
+                      value={review.postDate || ''}
+                      onChange={e => updateReview(review.id, 'postDate', e.target.value)}
                     />
                   </td>
                   <td className="p-3 align-top">
@@ -1715,7 +1769,29 @@ const App: React.FC = () => {
 
   const renderTasks = () => {
     const clientTasks = tasks.filter(t => t.clientId === activeClientId);
+    
+    // --- Task Helpers ---
+    const checkForCircularDependency = (taskId: string, newDependencyId: string): boolean => {
+      const visited = new Set<string>();
+      const queue = [newDependencyId];
+      
+      while (queue.length > 0) {
+          const currentId = queue.shift()!;
+          if (currentId === taskId) return true;
+          if (visited.has(currentId)) continue;
+          
+          visited.add(currentId);
+          const currentTask = tasks.find(t => t.id === currentId);
+          if (currentTask?.dependencies) {
+              for (const depId of currentTask.dependencies) {
+                  if (!visited.has(depId)) queue.push(depId);
+              }
+          }
+      }
+      return false;
+    };
 
+    // --- Task Actions ---
     const addTask = () => {
         const newTask: Task = {
             id: Date.now().toString(),
@@ -1732,14 +1808,35 @@ const App: React.FC = () => {
     };
 
     const updateTask = (id: string, field: keyof Task, value: any) => {
-        const updated = tasks.map(t => t.id === id ? { ...t, [field]: value } : t);
-        setTasks(updated);
-        dataService.saveTasks(updated);
+        const oldTask = tasks.find(t => t.id === id);
+        const updatedTasks = tasks.map(t => t.id === id ? { ...t, [field]: value } : t);
+        setTasks(updatedTasks);
+        dataService.saveTasks(updatedTasks);
+
+        // Send notification on status change
+        if (field === 'status' && oldTask && oldTask.status !== value) {
+            const newNotification: Notification = {
+                id: Date.now().toString(),
+                clientId: oldTask.clientId,
+                message: `Task "${oldTask.description}" updated to ${value}.`,
+                timestamp: new Date().toISOString(),
+                isRead: false,
+                taskId: oldTask.id
+            };
+            const updatedNotifications = [newNotification, ...notifications];
+            setNotifications(updatedNotifications);
+            dataService.saveNotifications(updatedNotifications);
+        }
     };
 
     const addDependency = (taskId: string, dependencyId: string) => {
       const task = tasks.find(t => t.id === taskId);
       if (!task) return;
+
+      if (checkForCircularDependency(taskId, dependencyId)) {
+          alert("This would create a circular dependency and is not allowed.");
+          return;
+      }
       
       const currentDeps = task.dependencies || [];
       if (!currentDeps.includes(dependencyId)) {
@@ -1759,6 +1856,26 @@ const App: React.FC = () => {
         dataService.saveTasks(updated);
     };
 
+    const handleBulkTaskAction = (action: 'delete' | 'status', newStatus?: TaskStatus) => {
+        if (selectedTaskIds.length === 0) return;
+
+        let updatedTasks = [...tasks];
+        if (action === 'delete') {
+            updatedTasks = tasks.filter(t => !selectedTaskIds.includes(t.id));
+        } else if (action === 'status' && newStatus) {
+            updatedTasks = tasks.map(t => selectedTaskIds.includes(t.id) ? { ...t, status: newStatus } : t);
+        }
+        setTasks(updatedTasks);
+        dataService.saveTasks(updatedTasks);
+        setSelectedTaskIds([]);
+    };
+    
+    const handleTaskSelection = (taskId: string) => {
+        setSelectedTaskIds(prev => 
+            prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
+        );
+    };
+
     return (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
@@ -1769,143 +1886,84 @@ const App: React.FC = () => {
                     <span className="sm:hidden">Add</span>
                 </button>
             </div>
+            
+            {/* Bulk Actions Bar */}
+            {!isClient && selectedTaskIds.length > 0 && (
+                <div className="p-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between gap-2 animate-in fade-in duration-300">
+                    <span className="text-xs font-medium text-slate-600">{selectedTaskIds.length} tasks selected</span>
+                    <div className="flex items-center gap-2">
+                        <select onChange={(e) => handleBulkTaskAction('status', e.target.value as TaskStatus)} className="text-xs border-slate-300 rounded-md py-1 focus:ring-emerald-500">
+                            <option>Change status...</option>
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                            <option value="On Hold">On Hold</option>
+                        </select>
+                        <button onClick={() => handleBulkTaskAction('delete')} className="p-1.5 text-red-500 hover:bg-red-100 rounded-md"><Trash2 size={16}/></button>
+                    </div>
+                </div>
+            )}
+
             <div className="divide-y divide-slate-100">
                 {clientTasks.length > 0 ? clientTasks.map(task => {
-                    // Dependencies logic
                     const deps = task.dependencies || [];
                     const blockingTasks = tasks.filter(t => deps.includes(t.id) && t.status !== 'Completed');
                     const isBlocked = blockingTasks.length > 0;
+                    
+                    let statusBgClass = '';
+                    if (isBlocked) {
+                        statusBgClass = 'bg-amber-50/50';
+                    } else {
+                        switch (task.status) {
+                            case 'Pending': statusBgClass = 'bg-amber-50/30'; break;
+                            case 'In Progress': statusBgClass = 'bg-blue-50/30'; break;
+                            case 'Completed': statusBgClass = 'bg-emerald-50/30'; break;
+                            case 'On Hold': statusBgClass = 'bg-slate-100'; break;
+                        }
+                    }
 
-                    // Status Styling
-                    let statusBorderClass = 'border-l-amber-400'; // Default Pending
-                    if (task.status === 'In Progress') statusBorderClass = 'border-l-blue-500';
-                    else if (task.status === 'Completed') statusBorderClass = 'border-l-emerald-500';
-                    else if (task.status === 'On Hold') statusBorderClass = 'border-l-slate-400';
-                    
-                    // Due Date Calculation
-                    const today = new Date();
-                    today.setHours(0,0,0,0);
-                    const dueDateObj = new Date(task.dueDate);
-                    dueDateObj.setHours(0,0,0,0);
-                    
-                    const diffTime = dueDateObj.getTime() - today.getTime();
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    const today = new Date(); today.setHours(0,0,0,0);
+                    const dueDateObj = new Date(task.dueDate); dueDateObj.setHours(0,0,0,0);
+                    const diffDays = Math.ceil((dueDateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                     
                     let dateStatus = null;
                     if (task.status !== 'Completed') {
-                        if (diffDays < 0) {
-                            dateStatus = <span className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100"><AlertCircle size={12}/> Overdue</span>;
-                        } else if (diffDays === 0) {
-                             dateStatus = <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100"><Clock size={12}/> Due Today</span>;
-                        } else if (diffDays <= 2) {
-                             dateStatus = <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Due Soon</span>;
-                        }
+                        if (diffDays < 0) dateStatus = <span className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100"><AlertCircle size={12}/> Overdue</span>;
+                        else if (diffDays === 0) dateStatus = <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100"><Clock size={12}/> Due Today</span>;
                     }
                     
                     return (
-                      <div key={task.id} className={`p-4 hover:bg-slate-50 transition-colors border-l-4 ${statusBorderClass} ${task.status === 'Completed' ? 'bg-slate-50/50' : ''} ${isBlocked ? 'bg-amber-50/30' : ''}`}>
+                      <div key={task.id} className={`p-4 transition-colors ${statusBgClass}`}>
                           <div className="flex items-start gap-3">
+                              {!isClient && <input type="checkbox" className="mt-1.5 rounded focus:ring-emerald-500 text-emerald-600" checked={selectedTaskIds.includes(task.id)} onChange={() => handleTaskSelection(task.id)} />}
                               <div className="flex-1 min-w-0">
                                   <div className="flex flex-col md:flex-row gap-3 md:items-start justify-between mb-2">
                                       <div className="w-full">
                                         <div className="flex items-center gap-2">
                                             <textarea 
                                                 className={`font-medium text-slate-800 bg-transparent border-none focus:ring-0 p-0 w-full resize-none ${task.status === 'Completed' ? 'line-through text-slate-400' : ''}`}
-                                                value={task.description}
-                                                rows={1}
+                                                value={task.description} rows={1}
                                                 onChange={e => updateTask(task.id, 'description', e.target.value)}
                                             />
                                             {dateStatus}
                                         </div>
-                                        {isBlocked && (
-                                          <div className="flex items-start gap-1 text-amber-600 text-xs mt-1">
-                                            <AlertTriangle size={12} className="mt-0.5 shrink-0"/>
-                                            <span>Waiting for: {blockingTasks.map(t => t.description).join(', ')}</span>
-                                          </div>
-                                        )}
+                                        {isBlocked && <div className="flex items-start gap-1 text-amber-600 text-xs mt-1"><AlertTriangle size={12} className="mt-0.5 shrink-0"/><span>Waiting for: {blockingTasks.map(t => t.description).join(', ')}</span></div>}
                                       </div>
                                       <div className="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto shrink-0">
-                                          <select 
-                                              value={task.status}
-                                              onChange={e => updateTask(task.id, 'status', e.target.value)}
-                                              className={`text-xs font-semibold px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer ${
-                                                  task.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 
-                                                  task.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                                  task.status === 'On Hold' ? 'bg-slate-200 text-slate-600' :
-                                                  'bg-amber-100 text-amber-700'
-                                              }`}
-                                          >
-                                              <option value="Pending">Pending</option>
-                                              <option value="In Progress">In Progress</option>
-                                              <option value="Completed">Completed</option>
-                                              <option value="On Hold">On Hold</option>
+                                          <select value={task.status} onChange={e => updateTask(task.id, 'status', e.target.value)}
+                                              className={`text-xs font-semibold px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer ${ task.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : task.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : task.status === 'On Hold' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700' }`}>
+                                              <option value="Pending">Pending</option><option value="In Progress">In Progress</option><option value="Completed">Completed</option><option value="On Hold">On Hold</option>
                                           </select>
-                                          {!isClient && (
-                                              <button onClick={() => deleteTask(task.id)} className="text-slate-300 hover:text-red-500 p-1">
-                                                  <Trash2 size={16} />
-                                              </button>
-                                          )}
+                                          {!isClient && <button onClick={() => deleteTask(task.id)} className="text-slate-300 hover:text-red-500 p-1"><Trash2 size={16} /></button>}
                                       </div>
                                   </div>
-                                  
                                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 mt-2">
-                                      <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded">
-                                          <Clock size={12} />
-                                          <span>Due:</span>
-                                          <input 
-                                              type="date" 
-                                              className="bg-transparent border-none p-0 text-xs text-slate-500 focus:ring-0 w-24"
-                                              value={task.dueDate}
-                                              onChange={e => updateTask(task.id, 'dueDate', e.target.value)}
-                                          />
-                                      </div>
-                                      <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded">
-                                          <span>Priority:</span>
-                                          <select 
-                                              value={task.priority}
-                                              onChange={e => updateTask(task.id, 'priority', e.target.value)}
-                                              className="bg-transparent border-none p-0 text-xs font-medium focus:ring-0 text-slate-600 cursor-pointer"
-                                          >
-                                              <option value="Low">Low</option>
-                                              <option value="Medium">Medium</option>
-                                              <option value="High">High</option>
-                                          </select>
-                                      </div>
-                                      
-                                      {/* Dependency Management */}
-                                      <div className="flex items-center gap-1 border-l border-slate-200 pl-2 ml-1">
-                                        <Link2 size={12} className="text-slate-400"/>
-                                        <span className="hidden sm:inline mr-1">Depends on:</span>
+                                      <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded"><Clock size={12} /><span>Due:</span><input type="date" className="bg-transparent border-none p-0 text-xs text-slate-500 focus:ring-0 w-24" value={task.dueDate} onChange={e => updateTask(task.id, 'dueDate', e.target.value)} /></div>
+                                      <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded"><span>Priority:</span><select value={task.priority} onChange={e => updateTask(task.id, 'priority', e.target.value)} className="bg-transparent border-none p-0 text-xs font-medium focus:ring-0 text-slate-600 cursor-pointer"><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option></select></div>
+                                      <div className="flex items-center gap-1 border-l border-slate-200 pl-2 ml-1"><Link2 size={12} className="text-slate-400"/><span className="hidden sm:inline mr-1">Depends on:</span>
                                         <div className="flex flex-wrap gap-1 relative">
-                                          {deps.length > 0 && deps.map(depId => {
-                                            const depTask = tasks.find(t => t.id === depId);
-                                            if (!depTask) return null;
-                                            return (
-                                              <span key={depId} className="bg-white px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200 shadow-sm">
-                                                 <span className="truncate max-w-[80px]">{depTask.description}</span>
-                                                 {!isClient && <button onClick={() => removeDependency(task.id, depId)} className="hover:text-red-500"><X size={10}/></button>}
-                                              </span>
-                                            )
-                                          })}
-                                          {!isClient && (
-                                            <div className="relative inline-block w-4 h-4">
-                                                <Plus size={14} className="cursor-pointer text-indigo-600 absolute inset-0"/>
-                                                <select 
-                                                  className="opacity-0 absolute inset-0 cursor-pointer w-full h-full"
-                                                  onChange={(e) => {
-                                                    if(e.target.value) {
-                                                      addDependency(task.id, e.target.value);
-                                                      e.target.value = '';
-                                                    }
-                                                  }}
-                                                >
-                                                  <option value="">Add dependency...</option>
-                                                  {clientTasks.filter(t => t.id !== task.id && !deps.includes(t.id)).map(t => (
-                                                    <option key={t.id} value={t.id}>{t.description}</option>
-                                                  ))}
-                                                </select>
-                                            </div>
-                                          )}
+                                          {deps.length > 0 && deps.map(depId => { const depTask = tasks.find(t => t.id === depId); if (!depTask) return null; return ( <span key={depId} className="bg-white px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200 shadow-sm"><span className="truncate max-w-[80px]">{depTask.description}</span>{!isClient && <button onClick={() => removeDependency(task.id, depId)} className="hover:text-red-500"><X size={10}/></button>}</span>)})}
+                                          {!isClient && <div className="relative inline-block w-4 h-4"><Plus size={14} className="cursor-pointer text-indigo-600 absolute inset-0"/><select className="opacity-0 absolute inset-0 cursor-pointer w-full h-full" onChange={(e) => { if(e.target.value) { addDependency(task.id, e.target.value); e.target.value = ''; } }}><option value="">Add...</option>{clientTasks.filter(t => t.id !== task.id && !deps.includes(t.id) && !checkForCircularDependency(t.id, task.id)).map(t => ( <option key={t.id} value={t.id}>{t.description}</option> ))}</select></div>}
                                         </div>
                                       </div>
                                   </div>
@@ -1921,6 +1979,17 @@ const App: React.FC = () => {
 
   const renderExpenses = () => {
     if (isClient) return null;
+
+    const expenseCategories = [
+        'Software',
+        'Service',
+        'Hosting',
+        'Marketing & Advertising',
+        'Office Supplies',
+        'Travel',
+        'Professional Development',
+        'Other'
+    ];
 
     const addExpense = () => {
         const newExp: Expense = {
@@ -1999,10 +2068,7 @@ const App: React.FC = () => {
                                     onChange={e => updateExpense(exp.id, 'category', e.target.value)}
                                     className="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-1 rounded border-none focus:ring-0"
                                 >
-                                    <option value="Software">Software</option>
-                                    <option value="Service">Service</option>
-                                    <option value="Hosting">Hosting</option>
-                                    <option value="Other">Other</option>
+                                    {expenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                 </select>
                                 <button onClick={() => deleteExpense(exp.id)} className="text-slate-300 hover:text-red-500 p-1">
                                     <Trash2 size={16} />
@@ -2049,10 +2115,7 @@ const App: React.FC = () => {
                                             onChange={e => updateExpense(exp.id, 'category', e.target.value)}
                                             className="bg-transparent border-none p-0 focus:ring-0 cursor-pointer"
                                         >
-                                            <option value="Software">Software</option>
-                                            <option value="Service">Service</option>
-                                            <option value="Hosting">Hosting</option>
-                                            <option value="Other">Other</option>
+                                            {expenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                         </select>
                                     </td>
                                     <td className="p-3">
@@ -2167,6 +2230,104 @@ const App: React.FC = () => {
       </div>
     );
   };
+  
+  const renderAiComms = () => {
+    if (isClient) return null;
+
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+           <div className="p-4 border-b border-slate-200 bg-slate-50">
+             <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Bot size={18}/> AI Email Studio</h3>
+           </div>
+           <div className="p-6 space-y-4">
+             <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Email Type</label>
+                <select value={aiEmailType} onChange={e => setAiEmailType(e.target.value)} className="w-full border-slate-300 rounded-lg">
+                    <option>Invoice Reminder</option>
+                    <option>Project Update</option>
+                    <option>Welcome Email</option>
+                    <option>Feedback Request</option>
+                    <option>Meeting Follow-up</option>
+                </select>
+             </div>
+             <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Additional Context</label>
+                <textarea 
+                    value={aiEmailContext} 
+                    onChange={e => setAiEmailContext(e.target.value)}
+                    rows={3}
+                    placeholder="e.g., Invoice #123 is overdue by 5 days. The project is 75% complete."
+                    className="w-full border-slate-300 rounded-lg"
+                />
+             </div>
+             <button onClick={handleGenerateEmail} disabled={isGenerating} className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
+                <Wand2 size={16} /> {isGenerating ? 'Generating...' : 'Generate Email'}
+             </button>
+           </div>
+        </div>
+
+        {aiGeneratedEmail && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-500">
+               <div className="p-4 border-b border-slate-200 bg-slate-50">
+                  <h3 className="font-semibold text-slate-700">Generated Content</h3>
+               </div>
+               <div className="p-6 space-y-4">
+                    <div>
+                        <label className="flex items-center justify-between text-sm font-medium text-slate-700 mb-1">
+                            Subject
+                            <button onClick={() => copyToClipboard(aiGeneratedEmail.subject)} className="text-xs flex items-center gap-1 text-slate-500 hover:text-emerald-600"><Copy size={12}/> Copy</button>
+                        </label>
+                        <div className="bg-slate-100 p-2 rounded-lg text-sm font-semibold">{aiGeneratedEmail.subject}</div>
+                    </div>
+                     <div>
+                        <label className="flex items-center justify-between text-sm font-medium text-slate-700 mb-1">
+                            Body
+                            <button onClick={() => copyToClipboard(aiGeneratedEmail.body)} className="text-xs flex items-center gap-1 text-slate-500 hover:text-emerald-600"><Copy size={12}/> Copy</button>
+                        </label>
+                        <div className="bg-slate-100 p-3 rounded-lg text-sm whitespace-pre-wrap h-64 overflow-y-auto">{aiGeneratedEmail.body}</div>
+                    </div>
+               </div>
+            </div>
+        )}
+      </div>
+    );
+  };
+  
+  const renderNotifications = () => {
+    if (!isClient) return null;
+    const clientNotifications = notifications
+        .filter(n => n.clientId === user.id)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    const markAllAsRead = () => {
+        const updated = notifications.map(n => n.clientId === user.id ? { ...n, isRead: true } : n);
+        setNotifications(updated);
+        dataService.saveNotifications(updated);
+    };
+
+    return (
+        <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                    <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Bell size={18}/> Your Notifications</h3>
+                    {unreadCount > 0 && <button onClick={markAllAsRead} className="text-sm text-emerald-600 font-medium hover:underline">Mark all as read</button>}
+                </div>
+                <div className="divide-y divide-slate-100">
+                    {clientNotifications.length > 0 ? clientNotifications.map(n => (
+                        <div key={n.id} className={`p-4 flex items-start gap-4 transition-colors ${n.isRead ? 'bg-white' : 'bg-emerald-50'}`}>
+                            <div className={`mt-1 h-2 w-2 rounded-full ${n.isRead ? 'bg-transparent' : 'bg-emerald-500'}`}></div>
+                            <div className="flex-1">
+                                <p className="text-sm text-slate-700">{n.message}</p>
+                                <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleString()}</p>
+                            </div>
+                        </div>
+                    )) : <p className="p-8 text-center text-sm text-slate-400">You have no notifications.</p>}
+                </div>
+            </div>
+        </div>
+    );
+  }
 
   const renderSettings = () => {
     if (isClient) return null;
@@ -2229,6 +2390,7 @@ const App: React.FC = () => {
         setIsMobileOpen={setIsMobileOpen}
         isClientView={isClient}
         siteName={settings.siteName}
+        unreadCount={unreadCount}
       />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
@@ -2288,6 +2450,8 @@ const App: React.FC = () => {
           {currentView === 'expenses' && renderExpenses()}
           {currentView === 'feedback' && renderFeedback()}
           {currentView === 'settings' && renderSettings()}
+          {currentView === 'ai_comms' && renderAiComms()}
+          {currentView === 'notifications' && renderNotifications()}
         </main>
       </div>
     </div>

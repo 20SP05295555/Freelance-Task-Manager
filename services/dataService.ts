@@ -1,4 +1,4 @@
-import { Client, GoogleReview, TrustpilotReview, Payment, GmailAccount, Address, Task, Expense, ClientFeedback, AdvanceTransaction, PortfolioProfile, AppSettings } from '../types';
+import { Client, GoogleReview, TrustpilotReview, Payment, GmailAccount, Address, Task, Expense, ClientFeedback, AdvanceTransaction, PortfolioProfile, AppSettings, Notification } from '../types';
 
 // Keys
 const CLIENTS_KEY = 'ftm_clients';
@@ -13,6 +13,7 @@ const EXPENSES_KEY = 'ftm_expenses';
 const FEEDBACK_KEY = 'ftm_feedback';
 const PORTFOLIO_KEY = 'ftm_portfolio';
 const SETTINGS_KEY = 'ftm_settings';
+const NOTIFICATIONS_KEY = 'ftm_notifications';
 
 // Helpers
 const get = <T>(key: string, defaultVal: T): T => {
@@ -89,4 +90,7 @@ export const dataService = {
 
   getSettings: () => get<AppSettings>(SETTINGS_KEY, initialSettings),
   saveSettings: (data: AppSettings) => set(SETTINGS_KEY, data),
+
+  getNotifications: () => get<Notification[]>(NOTIFICATIONS_KEY, []),
+  saveNotifications: (data: Notification[]) => set(NOTIFICATIONS_KEY, data),
 };
