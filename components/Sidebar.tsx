@@ -10,9 +10,10 @@ interface SidebarProps {
   isClientView: boolean;
   siteName?: string;
   unreadCount?: number;
+  adminUnreadCount?: number;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isMobileOpen, setIsMobileOpen, isClientView, siteName, unreadCount = 0 }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isMobileOpen, setIsMobileOpen, isClientView, siteName, unreadCount = 0, adminUnreadCount = 0 }) => {
   
   // Different nav items based on View Mode
   const navItems = isClientView 
@@ -28,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, i
     ]
   : [
       { id: 'dashboard' as ViewState, label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+      { id: 'activity_feed' as ViewState, label: 'Activity Feed', icon: <Bell size={20} />, badge: adminUnreadCount > 0 ? adminUnreadCount : 0 },
       { id: 'tasks' as ViewState, label: 'Tasks', icon: <CheckSquare size={20} /> },
       { id: 'ai_comms' as ViewState, label: 'AI Email Studio', icon: <Bot size={20} /> },
       { id: 'portfolio' as ViewState, label: 'Portfolio', icon: <Briefcase size={20} /> },

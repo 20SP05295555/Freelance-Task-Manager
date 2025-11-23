@@ -14,6 +14,7 @@ const FEEDBACK_KEY = 'ftm_feedback';
 const PORTFOLIO_KEY = 'ftm_portfolio';
 const SETTINGS_KEY = 'ftm_settings';
 const NOTIFICATIONS_KEY = 'ftm_notifications';
+const ADMIN_LAST_READ_KEY = 'ftm_admin_last_read';
 
 // Helpers
 const get = <T>(key: string, defaultVal: T): T => {
@@ -93,4 +94,7 @@ export const dataService = {
 
   getNotifications: () => get<Notification[]>(NOTIFICATIONS_KEY, []),
   saveNotifications: (data: Notification[]) => set(NOTIFICATIONS_KEY, data),
+
+  getAdminLastRead: () => get<string>(ADMIN_LAST_READ_KEY, new Date(0).toISOString()),
+  saveAdminLastRead: (timestamp: string) => set(ADMIN_LAST_READ_KEY, timestamp),
 };

@@ -141,4 +141,4 @@ export interface Notification {
   taskId?: string;
 }
 
-export type ViewState = 'dashboard' | 'google' | 'trustpilot' | 'payments' | 'gmail' | 'address' | 'tasks' | 'expenses' | 'feedback' | 'portfolio' | 'settings' | 'ai_comms' | 'notifications';
+export type ViewState = 'dashboard' | 'google' | 'trustpilot' | 'payments' | 'gmail' | 'address' | 'tasks' | 'expenses' | 'feedback' | 'portfolio' | 'settings' | 'ai_comms' | 'notifications' | 'activity_feed';

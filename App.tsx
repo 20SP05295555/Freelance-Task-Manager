@@ -47,6 +47,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const [activeClientId, setActiveClientId] = useState<string>(''); 
   const [paymentTab, setPaymentTab] = useState<'invoices' | 'advance'>('invoices');
+  const [adminLastRead, setAdminLastRead] = useState<string>('');
 
   // --- Data State ---
   const [clients, setClients] = useState<Client[]>([]);
@@ -70,6 +71,10 @@ const App: React.FC = () => {
   const [aiEmailType, setAiEmailType] = useState('Invoice Reminder');
   const [aiEmailContext, setAiEmailContext] = useState('');
   const [aiGeneratedEmail, setAiGeneratedEmail] = useState<{subject: string, body: string} | null>(null);
+
+  // --- Custom Notification State ---
+  const [customNotificationClientId, setCustomNotificationClientId] = useState<string>('');
+  const [customNotificationMessage, setCustomNotificationMessage] = useState<string>('');
 
   // --- Portfolio Edit State ---
   const [isEditingPortfolio, setIsEditingPortfolio] = useState(false);
@@ -95,6 +100,7 @@ const App: React.FC = () => {
     setNotifications(dataService.getNotifications());
     setPortfolio(dataService.getPortfolio());
     setSettings(dataService.getSettings());
+    setAdminLastRead(dataService.getAdminLastRead());
     
     // Check Auth Session
     const storedAuth = localStorage.getItem(AUTH_KEY);
@@ -129,11 +135,34 @@ const App: React.FC = () => {
     }
   }, [clients, activeClientId]);
 
+  // Set default client for custom notification sender
+  useEffect(() => {
+    if (clients.length > 0 && !clients.find(c => c.id === customNotificationClientId)) {
+        setCustomNotificationClientId(clients[0].id);
+    }
+  }, [clients, customNotificationClientId]);
+
+
+  // Update admin's last read timestamp when they view the feed
+  useEffect(() => {
+    if (currentView === 'activity_feed' && user?.role === 'admin') {
+      const now = new Date().toISOString();
+      setAdminLastRead(now);
+      dataService.saveAdminLastRead(now);
+    }
+  }, [currentView, user]);
+
   // --- Derived State ---
   const unreadCount = useMemo(() => {
     if (user?.role !== 'client') return 0;
     return notifications.filter(n => n.clientId === user.id && !n.isRead).length;
   }, [notifications, user]);
+
+  const adminUnreadCount = useMemo(() => {
+    if (user?.role !== 'admin' || !adminLastRead) return 0;
+    const lastReadDate = new Date(adminLastRead).getTime();
+    return notifications.filter(n => new Date(n.timestamp).getTime() > lastReadDate).length;
+  }, [notifications, adminLastRead, user]);
 
   // --- Auth Handlers ---
 
@@ -203,6 +232,20 @@ const App: React.FC = () => {
       localStorage.setItem(AUTH_KEY, JSON.stringify(clientUser));
       setActiveClientId(client.id);
       
+      // Create notification for admin
+      const newNotification: Notification = {
+        id: Date.now().toString(),
+        clientId: client.id,
+        message: `${client.name} has accepted their invitation and set up their account.`,
+        timestamp: new Date().toISOString(),
+        isRead: false, // This is for client view, doesn't affect admin
+      };
+      setNotifications(currentNotifications => {
+        const updated = [newNotification, ...currentNotifications];
+        dataService.saveNotifications(updated);
+        return updated;
+      });
+
       // Clear URL param
       window.history.replaceState({}, '', window.location.pathname);
       setInviteClientId(null);
@@ -234,6 +277,22 @@ const App: React.FC = () => {
     const updated = [newFeedback, ...feedback];
     setFeedback(updated);
     dataService.saveFeedback(updated);
+    
+    // Add notification for admin
+    const clientName = clients.find(c => c.id === activeClientId)?.name || 'A client';
+    const newNotification: Notification = {
+      id: (Date.now() + 1).toString(), // Ensure unique id
+      clientId: activeClientId,
+      message: `${clientName} submitted new feedback with a ${feedbackRating}-star rating.`,
+      timestamp: new Date().toISOString(),
+      isRead: false,
+    };
+    setNotifications(currentNotifications => {
+      const updated = [newNotification, ...currentNotifications];
+      dataService.saveNotifications(updated);
+      return updated;
+    });
+
     setFeedbackComment('');
     setFeedbackRating(5);
     alert("Thank you for your feedback!");
@@ -246,6 +305,28 @@ const App: React.FC = () => {
       setAiGeneratedEmail(result);
       setIsGenerating(false);
   }
+
+  const handleSendCustomNotification = () => {
+    if (!customNotificationClientId || !customNotificationMessage.trim()) {
+      alert("Please select a client and enter a message.");
+      return;
+    }
+
+    const newNotification: Notification = {
+      id: Date.now().toString(),
+      clientId: customNotificationClientId,
+      message: customNotificationMessage.trim(),
+      timestamp: new Date().toISOString(),
+      isRead: false,
+    };
+
+    const updatedNotifications = [newNotification, ...notifications];
+    setNotifications(updatedNotifications);
+    dataService.saveNotifications(updatedNotifications);
+
+    setCustomNotificationMessage('');
+    alert("Notification sent successfully!");
+  };
 
   // --- Data Handlers ---
 
@@ -1770,7 +1851,122 @@ const App: React.FC = () => {
   const renderTasks = () => {
     const clientTasks = tasks.filter(t => t.clientId === activeClientId);
     
-    // --- Task Helpers ---
+    // --- Task Actions ---
+    const addTask = () => {
+        const newTask: Task = {
+            id: Date.now().toString(),
+            clientId: activeClientId,
+            description: 'New Task',
+            dueDate: new Date().toISOString().split('T')[0],
+            status: 'Pending',
+            priority: 'Medium',
+            dependencies: []
+        };
+        const updated = [newTask, ...tasks];
+        setTasks(updated);
+        dataService.saveTasks(updated);
+    };
+
+    const updateTask = (id: string, field: keyof Task, value: any) => {
+        if (isClient && !['status', 'description'].includes(field)) {
+            return;
+        }
+    
+        const originalTask = tasks.find(t => t.id === id);
+        if (!originalTask || originalTask[field] === value) {
+            return;
+        }
+        
+        const updatedTasks = tasks.map(t => (t.id === id ? { ...t, [field]: value } : t));
+        setTasks(updatedTasks);
+        dataService.saveTasks(updatedTasks);
+    
+        // Notification Logic
+        let notificationMessage = '';
+        const clientName = clients.find(c => c.id === originalTask.clientId)?.name || 'A client';
+    
+        if (field === 'status') {
+            notificationMessage = `Task "${originalTask.description}" status was updated to ${value}.`;
+        } else if (field === 'description' && isClient) {
+            notificationMessage = `${clientName} updated the description for task: "${originalTask.description}".`;
+        }
+    
+        if (notificationMessage) {
+            const newNotification: Notification = {
+                id: Date.now().toString(),
+                clientId: originalTask.clientId,
+                message: notificationMessage,
+                timestamp: new Date().toISOString(),
+                isRead: false,
+                taskId: originalTask.id,
+            };
+            const updatedNotifications = [newNotification, ...notifications];
+            setNotifications(updatedNotifications);
+            dataService.saveNotifications(updatedNotifications);
+        }
+    };
+    
+    if (isClient) {
+        return (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                    <h3 className="font-semibold text-slate-700">My Tasks</h3>
+                    <button onClick={addTask} className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 text-sm">
+                        <Plus size={16} /> Request New Work
+                    </button>
+                </div>
+                <div className="divide-y divide-slate-100">
+                    {clientTasks.length > 0 ? clientTasks.map(task => {
+                        const today = new Date(); today.setHours(0,0,0,0);
+                        const dueDateObj = new Date(task.dueDate); dueDateObj.setHours(0,0,0,0);
+                        const diffDays = Math.ceil((dueDateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                        
+                        let dateStatus = null;
+                        if (task.status !== 'Completed') {
+                            if (diffDays < 0) dateStatus = <span className="flex items-center gap-1 text-xs font-bold text-red-600"><AlertCircle size={12}/> Overdue</span>;
+                            else if (diffDays === 0) dateStatus = <span className="flex items-center gap-1 text-xs font-bold text-amber-600"><Clock size={12}/> Due Today</span>;
+                        }
+
+                        return (
+                            <div key={task.id} className="p-4 space-y-3">
+                                <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
+                                    <div className="flex-1">
+                                        <textarea 
+                                            className={`font-medium text-slate-800 bg-slate-50 border border-slate-200 rounded-md p-2 w-full resize-y focus:ring-1 focus:ring-emerald-500 ${task.status === 'Completed' ? 'line-through text-slate-400' : ''}`}
+                                            value={task.description}
+                                            rows={2}
+                                            onBlur={(e) => updateTask(task.id, 'description', e.target.value)}
+                                            onChange={(e) => {
+                                                const updatedTasks = tasks.map(t => t.id === task.id ? { ...t, description: e.target.value } : t);
+                                                setTasks(updatedTasks);
+                                            }}
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">You can edit to add notes. Changes are saved when you click away.</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {dateStatus}
+                                        <select value={task.status} onChange={e => updateTask(task.id, 'status', e.target.value as TaskStatus)}
+                                            className={`text-xs font-semibold px-2 py-1.5 rounded-full border-none focus:ring-emerald-500 cursor-pointer ${ task.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : task.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : task.status === 'On Hold' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700' }`}>
+                                            <option value="Pending">Pending</option>
+                                            <option value="In Progress">In Progress</option>
+                                            <option value="Completed">Completed</option>
+                                            <option value="On Hold">On Hold</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 pt-2 border-t border-slate-100">
+                                    <div className="flex items-center gap-1"><Clock size={12} /><span>Due: {new Date(task.dueDate).toLocaleDateString()}</span></div>
+                                    <div className="flex items-center gap-1"><span>Priority:</span><span className="font-medium text-slate-600">{task.priority}</span></div>
+                                </div>
+                            </div>
+                        );
+                    }) : <p className="p-8 text-center text-slate-400 text-sm">You have no tasks assigned.</p>}
+                </div>
+            </div>
+        );
+    }
+
+    // Admin View
     const checkForCircularDependency = (taskId: string, newDependencyId: string): boolean => {
       const visited = new Set<string>();
       const queue = [newDependencyId];
@@ -1789,44 +1985,6 @@ const App: React.FC = () => {
           }
       }
       return false;
-    };
-
-    // --- Task Actions ---
-    const addTask = () => {
-        const newTask: Task = {
-            id: Date.now().toString(),
-            clientId: activeClientId,
-            description: 'New Task',
-            dueDate: new Date().toISOString().split('T')[0],
-            status: 'Pending',
-            priority: 'Medium',
-            dependencies: []
-        };
-        const updated = [newTask, ...tasks];
-        setTasks(updated);
-        dataService.saveTasks(updated);
-    };
-
-    const updateTask = (id: string, field: keyof Task, value: any) => {
-        const oldTask = tasks.find(t => t.id === id);
-        const updatedTasks = tasks.map(t => t.id === id ? { ...t, [field]: value } : t);
-        setTasks(updatedTasks);
-        dataService.saveTasks(updatedTasks);
-
-        // Send notification on status change
-        if (field === 'status' && oldTask && oldTask.status !== value) {
-            const newNotification: Notification = {
-                id: Date.now().toString(),
-                clientId: oldTask.clientId,
-                message: `Task "${oldTask.description}" updated to ${value}.`,
-                timestamp: new Date().toISOString(),
-                isRead: false,
-                taskId: oldTask.id
-            };
-            const updatedNotifications = [newNotification, ...notifications];
-            setNotifications(updatedNotifications);
-            dataService.saveNotifications(updatedNotifications);
-        }
     };
 
     const addDependency = (taskId: string, dependencyId: string) => {
@@ -2329,6 +2487,80 @@ const App: React.FC = () => {
     );
   }
 
+  const renderActivityFeed = () => {
+    if (isClient) return null;
+
+    const sortedNotifications = [...notifications].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Custom Notification Sender */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-200 bg-slate-50">
+            <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Send size={18} /> Send Custom Notification</h3>
+          </div>
+          <div className="p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Select Buyer (Client)</label>
+              <select
+                value={customNotificationClientId}
+                onChange={(e) => setCustomNotificationClientId(e.target.value)}
+                className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-emerald-500 focus:border-emerald-500"
+              >
+                {clients.map(client => (
+                  <option key={client.id} value={client.id}>{client.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Notification Message</label>
+              <textarea
+                rows={3}
+                className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-emerald-500 focus:border-emerald-500"
+                placeholder="Type your message here..."
+                value={customNotificationMessage}
+                onChange={(e) => setCustomNotificationMessage(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={handleSendCustomNotification}
+              className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 transition-colors font-medium"
+            >
+              <Send size={16} /> Send to Client
+            </button>
+          </div>
+        </div>
+
+        {/* Activity Feed List */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-200 bg-slate-50">
+            <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Bell size={18} /> Activity Feed</h3>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {sortedNotifications.length > 0 ? sortedNotifications.map(n => {
+              const client = clients.find(c => c.id === n.clientId);
+              return (
+                <div key={n.id} className="p-4 flex items-start gap-4 hover:bg-slate-50">
+                  <div className="mt-1 h-8 w-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 text-sm font-bold">
+                    {client?.name?.[0] || '?'}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-slate-800">
+                       {n.message}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      <span className="font-semibold">{client?.name || 'System'}</span> • {new Date(n.timestamp).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              );
+            }) : <p className="p-8 text-center text-sm text-slate-400">No activity yet.</p>}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderSettings = () => {
     if (isClient) return null;
 
@@ -2391,6 +2623,7 @@ const App: React.FC = () => {
         isClientView={isClient}
         siteName={settings.siteName}
         unreadCount={unreadCount}
+        adminUnreadCount={adminUnreadCount}
       />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
@@ -2452,6 +2685,7 @@ const App: React.FC = () => {
           {currentView === 'settings' && renderSettings()}
           {currentView === 'ai_comms' && renderAiComms()}
           {currentView === 'notifications' && renderNotifications()}
+          {currentView === 'activity_feed' && renderActivityFeed()}
         </main>
       </div>
     </div>
