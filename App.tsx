@@ -4,7 +4,7 @@ import { ClientSelector } from './components/ClientSelector';
 import { LoginScreen } from './components/LoginScreen';
 import { ViewState, Client, GoogleReview, TrustpilotReview, Payment, GmailAccount, Address, Task, Expense, ClientFeedback, AdvanceTransaction, AdvanceType, TaskStatus, TaskPriority, PortfolioProfile, Project, AppSettings, Notification } from './types';
 import { dataService } from './services/dataService';
-import { Menu, Plus, Trash2, Copy, Wand2, LogOut, UserCheck, Eye, EyeOff, Link as LinkIcon, Send, Lock, Mail, Star, CreditCard, Users, ShieldCheck, MapPin, CheckSquare, DollarSign, TrendingDown, TrendingUp, AlertCircle, Clock, ArrowRight, Briefcase, Edit3, Save, Globe, ExternalLink, X, Settings, AlertTriangle, Link2, UploadCloud, Bot, Bell } from 'lucide-react';
+import { Menu, Plus, Trash2, Copy, Wand2, LogOut, UserCheck, Eye, EyeOff, Link as LinkIcon, Send, Lock, Mail, Star, CreditCard, Users, ShieldCheck, MapPin, CheckSquare, DollarSign, TrendingDown, TrendingUp, AlertCircle, Clock, ArrowRight, Briefcase, Edit3, Save, Globe, ExternalLink, X, Settings, AlertTriangle, Link2, UploadCloud, Bot, Bell, MessageSquareHeart } from 'lucide-react';
 import { generateReviewContent, generateEmailTemplate } from './services/geminiService';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -270,9 +270,11 @@ const App: React.FC = () => {
 
   const generateInviteLink = (client: Client) => {
     if (!client) return;
-    const link = `${window.location.origin}${window.location.pathname}?invite=${client.id}`;
-    copyToClipboard(link);
-    alert(`Invite link copied for ${client.name}!\n\nSend this link to the client:\n${link}`);
+    const link = new URL(window.location.href);
+    link.searchParams.set('invite', client.id);
+    const linkString = link.toString();
+    copyToClipboard(linkString);
+    alert(`Invite link copied for ${client.name}!\n\nSend this link to the client:\n${linkString}`);
   };
 
   const handleSubmitFeedback = () => {
@@ -1123,6 +1125,10 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                             <div>
+                                <label className="text-xs text-slate-500 font-medium uppercase">Target Link</label>
+                                <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1 text-blue-600" value={review.link} placeholder="Company Trustpilot URL" readOnly={isClient} onChange={e => updateReview(review.id, 'link', e.target.value)} />
+                            </div>
+                            <div>
                                 <label className="text-xs text-slate-500 font-medium uppercase">Content</label>
                                 <textarea className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 resize-y min-h-[60px] mt-1" value={review.content} placeholder="Review content..." onChange={e => updateReview(review.id, 'content', e.target.value)} />
                             </div>
@@ -1173,6 +1179,7 @@ const App: React.FC = () => {
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-500 font-medium">
               <tr>
+                <th className="p-3">Target Link</th>
                 <th className="p-3">Title</th>
                 <th className="p-3 w-1/4">Content</th>
                 <th className="p-3">Experience Date</th>
@@ -1187,6 +1194,20 @@ const App: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {clientReviews.map(review => (
                 <tr key={review.id} className="hover:bg-slate-50 group">
+                  <td className="p-3 align-top">
+                     <input 
+                      className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none text-blue-600 text-xs"
+                      value={review.link}
+                      placeholder="Trustpilot URL"
+                      readOnly={isClient}
+                      onChange={e => updateReview(review.id, 'link', e.target.value)}
+                    />
+                     {review.link && (
+                      <a href={review.link} target="_blank" rel="noreferrer" className="text-xs text-slate-400 hover:text-blue-600 flex items-center mt-1">
+                        Open <LinkIcon size={10} className="ml-1"/>
+                      </a>
+                    )}
+                  </td>
                   <td className="p-3 align-top">
                     <input 
                       className="w-full font-medium bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none mb-1"
@@ -1641,7 +1662,7 @@ const App: React.FC = () => {
         const updated = gmails.filter(g => g.id !== id);
         setGmails(updated);
         dataService.saveGmails(updated);
-    }
+    };
 
     return (
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -2124,453 +2145,410 @@ const App: React.FC = () => {
                                         {isBlocked && <div className="flex items-start gap-1 text-amber-600 text-xs mt-1"><AlertTriangle size={12} className="mt-0.5 shrink-0"/><span>Waiting for: {blockingTasks.map(t => t.description).join(', ')}</span></div>}
                                       </div>
                                       <div className="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto shrink-0">
-                                          <select value={task.status} onChange={e => updateTask(task.id, 'status', e.target.value)}
+                                          <select value={task.status} onChange={e => updateTask(task.id, 'status', e.target.value as TaskStatus)}
                                               className={`text-xs font-semibold px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer ${ task.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : task.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : task.status === 'On Hold' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700' }`}>
                                               <option value="Pending">Pending</option><option value="In Progress">In Progress</option><option value="Completed">Completed</option><option value="On Hold">On Hold</option>
                                           </select>
-                                          {!isClient && <button onClick={() => deleteTask(task.id)} className="text-slate-300 hover:text-red-500 p-1"><Trash2 size={16} /></button>}
+                                          
+                                          <select value={task.priority} onChange={e => updateTask(task.id, 'priority', e.target.value as TaskPriority)}
+                                              className={`text-xs font-bold px-2 py-1 rounded border-none focus:ring-0 cursor-pointer ${ task.priority === 'High' ? 'text-red-600 bg-red-50' : task.priority === 'Medium' ? 'text-amber-600 bg-amber-50' : 'text-slate-500 bg-slate-100'}`}>
+                                              <option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option>
+                                          </select>
                                       </div>
                                   </div>
-                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 mt-2">
-                                      <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded"><Clock size={12} /><span>Due:</span><input type="date" className="bg-transparent border-none p-0 text-xs text-slate-500 focus:ring-0 w-24" value={task.dueDate} onChange={e => updateTask(task.id, 'dueDate', e.target.value)} /></div>
-                                      <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded"><span>Priority:</span><select value={task.priority} onChange={e => updateTask(task.id, 'priority', e.target.value)} className="bg-transparent border-none p-0 text-xs font-medium focus:ring-0 text-slate-600 cursor-pointer"><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option></select></div>
-                                      <div className="flex items-center gap-1 border-l border-slate-200 pl-2 ml-1"><Link2 size={12} className="text-slate-400"/><span className="hidden sm:inline mr-1">Depends on:</span>
-                                        <div className="flex flex-wrap gap-1 relative">
-                                          {deps.length > 0 && deps.map(depId => { const depTask = tasks.find(t => t.id === depId); if (!depTask) return null; return ( <span key={depId} className="bg-white px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200 shadow-sm"><span className="truncate max-w-[80px]">{depTask.description}</span>{!isClient && <button onClick={() => removeDependency(task.id, depId)} className="hover:text-red-500"><X size={10}/></button>}</span>)})}
-                                          {!isClient && <div className="relative inline-block w-4 h-4"><Plus size={14} className="cursor-pointer text-indigo-600 absolute inset-0"/><select className="opacity-0 absolute inset-0 cursor-pointer w-full h-full" onChange={(e) => { if(e.target.value) { addDependency(task.id, e.target.value); e.target.value = ''; } }}><option value="">Add...</option>{clientTasks.filter(t => t.id !== task.id && !deps.includes(t.id) && !checkForCircularDependency(t.id, task.id)).map(t => ( <option key={t.id} value={t.id}>{t.description}</option> ))}</select></div>}
-                                        </div>
+                                  
+                                  <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mt-2">
+                                      <div className="flex items-center gap-1">
+                                          <Clock size={12}/>
+                                          <input type="date" className="bg-transparent border-none p-0 text-xs focus:ring-0 text-slate-500" value={task.dueDate} onChange={e => updateTask(task.id, 'dueDate', e.target.value)} />
+                                      </div>
+                                      
+                                      <div className="flex items-center gap-1">
+                                          <Link2 size={12}/>
+                                          <select 
+                                              className="bg-transparent border-none p-0 text-xs focus:ring-0 text-slate-500 max-w-[150px] truncate"
+                                              onChange={(e) => {
+                                                  if(e.target.value) addDependency(task.id, e.target.value);
+                                                  e.target.value = "";
+                                              }}
+                                          >
+                                              <option value="">+ Add Dependency</option>
+                                              {clientTasks.filter(t => t.id !== task.id && !(task.dependencies || []).includes(t.id)).map(t => (
+                                                  <option key={t.id} value={t.id}>{t.description}</option>
+                                              ))}
+                                          </select>
                                       </div>
                                   </div>
                               </div>
+                              
+                              {/* Remove Dependency Button */}
+                              {deps.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-2 pl-6">
+                                      {deps.map(depId => {
+                                          const depTask = tasks.find(d => d.id === depId);
+                                          return (
+                                              <span key={depId} className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                  <Link2 size={10}/> {depTask?.description.substring(0, 15)}...
+                                                  <button onClick={() => removeDependency(task.id, depId)} className="hover:text-red-500"><X size={10}/></button>
+                                              </span>
+                                          )
+                                      })}
+                                  </div>
+                              )}
                           </div>
+                          {!isClient && (
+                            <button onClick={() => deleteTask(task.id)} className="text-slate-300 hover:text-red-500 p-2 self-start"><Trash2 size={16} /></button>
+                          )}
                       </div>
                     );
-                }) : <p className="p-8 text-center text-slate-400 text-sm">No tasks assigned.</p>}
+                }) : <p className="p-8 text-center text-slate-400 text-sm">No tasks found.</p>}
             </div>
         </div>
     );
   };
 
   const renderExpenses = () => {
-    if (isClient) return null;
-
-    const expenseCategories = [
-        'Software',
-        'Service',
-        'Hosting',
-        'Marketing & Advertising',
-        'Office Supplies',
-        'Travel',
-        'Professional Development',
-        'Other'
-    ];
+    const expenseCategories = ['Software', 'Hosting', 'Service', 'Marketing & Advertising', 'Office Supplies', 'Travel', 'Professional Development', 'Other'];
 
     const addExpense = () => {
-        const newExp: Expense = {
-            id: Date.now().toString(),
-            description: 'New Expense',
-            amount: 0,
-            date: new Date().toISOString().split('T')[0],
-            category: 'Software'
-        };
-        const updated = [newExp, ...expenses];
-        setExpenses(updated);
-        dataService.saveExpenses(updated);
+      const newExp: Expense = {
+        id: Date.now().toString(),
+        description: 'New Expense',
+        amount: 0,
+        date: new Date().toISOString().split('T')[0],
+        category: 'Software'
+      };
+      const updated = [newExp, ...expenses];
+      setExpenses(updated);
+      dataService.saveExpenses(updated);
     };
 
     const updateExpense = (id: string, field: keyof Expense, value: any) => {
-        const updated = expenses.map(e => e.id === id ? { ...e, [field]: value } : e);
-        setExpenses(updated);
-        dataService.saveExpenses(updated);
+      const updated = expenses.map(e => e.id === id ? { ...e, [field]: value } : e);
+      setExpenses(updated);
+      dataService.saveExpenses(updated);
     };
-
+    
     const deleteExpense = (id: string) => {
-        const updated = expenses.filter(e => e.id !== id);
-        setExpenses(updated);
-        dataService.saveExpenses(updated);
+      const updated = expenses.filter(e => e.id !== id);
+      setExpenses(updated);
+      dataService.saveExpenses(updated);
     };
 
     const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
 
     return (
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p className="text-xs font-bold text-slate-500 uppercase">Total Expenses</p>
-                    <h3 className="text-2xl font-bold text-slate-800 mt-1">${totalExpenses.toLocaleString()}</h3>
-                </div>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+          <div>
+            <h3 className="font-semibold text-slate-700">Expense Tracker</h3>
+            <p className="text-xs text-slate-500 mt-1">Total: <span className="font-bold text-slate-800">${totalExpenses.toFixed(2)}</span></p>
+          </div>
+          <button onClick={addExpense} className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 text-sm">
+            <Plus size={16} /> <span className="hidden sm:inline">Add Expense</span><span className="sm:hidden">Add</span>
+          </button>
+        </div>
+        
+        <div className="divide-y divide-slate-100">
+          {expenses.length > 0 ? expenses.map(exp => (
+            <div key={exp.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
+                 <input type="date" className="text-sm bg-transparent border-none p-0 focus:ring-0 text-slate-500" value={exp.date} onChange={e => updateExpense(exp.id, 'date', e.target.value)} />
+                 <select className="text-sm bg-slate-50 border-none rounded p-1 focus:ring-emerald-500" value={exp.category} onChange={e => updateExpense(exp.id, 'category', e.target.value)}>
+                    {expenseCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                 </select>
+                 <div className="col-span-2 sm:col-span-2">
+                    <input className="w-full text-sm font-medium border-b border-transparent focus:border-emerald-500 focus:outline-none" value={exp.description} placeholder="Description" onChange={e => updateExpense(exp.id, 'description', e.target.value)} />
+                 </div>
+              </div>
+              <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
+                 <div className="flex items-center">
+                    <span className="text-slate-400 mr-1">$</span>
+                    <input type="number" className="w-20 font-bold text-slate-700 bg-transparent border-none p-0 focus:ring-0 text-right" value={exp.amount} onChange={e => updateExpense(exp.id, 'amount', Number(e.target.value))} />
+                 </div>
+                 <button onClick={() => deleteExpense(exp.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>
+              </div>
             </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-semibold text-slate-700">Expense Tracker</h3>
-                    <button onClick={addExpense} className="flex items-center gap-2 bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm">
-                        <Plus size={16} /> <span className="hidden sm:inline">Add Expense</span><span className="sm:hidden">Add</span>
+          )) : <p className="text-center py-8 text-slate-400 text-sm">No expenses recorded.</p>}
+        </div>
+      </div>
+    );
+  };
+  
+  const renderFeedback = () => {
+      // Client View: Form
+      if (isClient) {
+          return (
+              <div className="max-w-xl mx-auto space-y-6">
+                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">We value your feedback</h2>
+                    <p className="text-slate-500 mb-6">How was your experience working with us?</p>
+                    
+                    <div className="flex justify-center gap-2 mb-6">
+                       {[1, 2, 3, 4, 5].map(star => (
+                          <button 
+                            key={star} 
+                            onClick={() => setFeedbackRating(star)}
+                            className={`p-2 transition-transform hover:scale-110 ${star <= feedbackRating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-200'}`}
+                          >
+                             <Star size={32} fill={star <= feedbackRating ? "currentColor" : "none"} />
+                          </button>
+                       ))}
+                    </div>
+                    
+                    <textarea 
+                       className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none h-32 resize-none mb-4"
+                       placeholder="Tell us what you liked or how we can improve..."
+                       value={feedbackComment}
+                       onChange={e => setFeedbackComment(e.target.value)}
+                    />
+                    
+                    <button 
+                      onClick={handleSubmitFeedback}
+                      disabled={!feedbackComment.trim()}
+                      className="w-full bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                       Submit Feedback
                     </button>
+                 </div>
+                 
+                 {/* Past Feedback */}
+                 <div className="space-y-4">
+                    <h3 className="font-bold text-slate-700 px-2">Your Past Reviews</h3>
+                    {feedback.filter(f => f.clientId === activeClientId).length > 0 ? (
+                        feedback.filter(f => f.clientId === activeClientId).map(f => (
+                            <div key={f.id} className="bg-white p-4 rounded-lg border border-slate-100 shadow-sm">
+                               <div className="flex justify-between items-start mb-2">
+                                  <div className="flex text-yellow-400">
+                                     {[...Array(5)].map((_, i) => <Star key={i} size={14} fill={i < f.rating ? "currentColor" : "none"} className={i < f.rating ? "" : "text-slate-200"} />)}
+                                  </div>
+                                  <span className="text-xs text-slate-400">{f.date}</span>
+                               </div>
+                               <p className="text-slate-600 text-sm">{f.comment}</p>
+                            </div>
+                        ))
+                    ) : <p className="text-center text-slate-400 text-sm py-4">No reviews yet.</p>}
+                 </div>
+              </div>
+          );
+      }
+      
+      // Admin View: List
+      return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+             {feedback.length > 0 ? feedback.map(f => {
+                 const clientName = clients.find(c => c.id === f.clientId)?.name || 'Unknown Client';
+                 return (
+                     <div key={f.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                        <div className="flex justify-between items-start mb-3">
+                           <div>
+                              <h4 className="font-bold text-slate-800">{clientName}</h4>
+                              <span className="text-xs text-slate-400">{f.date}</span>
+                           </div>
+                           <div className="flex bg-yellow-50 px-2 py-1 rounded text-yellow-600 font-bold text-sm">
+                              {f.rating} <Star size={14} className="ml-1 fill-current"/>
+                           </div>
+                        </div>
+                        <p className="text-slate-600 text-sm italic">"{f.comment}"</p>
+                     </div>
+                 )
+             }) : (
+                 <div className="col-span-full text-center py-12 text-slate-400 bg-white rounded-xl border border-dashed border-slate-200">
+                    <MessageSquareHeart size={48} className="mx-auto mb-3 opacity-20"/>
+                    <p>No client feedback received yet.</p>
+                 </div>
+             )}
+          </div>
+      );
+  };
+  
+  const renderAIComms = () => {
+      return (
+          <div className="max-w-4xl mx-auto">
+             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
+                   <div className="flex items-center gap-3 mb-2">
+                      <Bot size={32} />
+                      <h2 className="text-2xl font-bold">AI Email Studio</h2>
+                   </div>
+                   <p className="text-indigo-100">Instantly generate professional client communications tailored to your needs.</p>
                 </div>
-
-                {/* Mobile List View */}
-                <div className="lg:hidden divide-y divide-slate-200">
-                    {expenses.length > 0 ? expenses.map(exp => (
-                        <div key={exp.id} className="p-4 space-y-3">
-                            <div className="flex justify-between items-start">
-                                <input 
-                                    type="date" 
-                                    className="bg-transparent text-sm font-medium text-slate-500 focus:outline-none"
-                                    value={exp.date}
-                                    onChange={e => updateExpense(exp.id, 'date', e.target.value)}
-                                />
-                                <div className="flex items-center text-red-600 font-bold">
-                                    <span>$</span>
-                                    <input 
-                                        type="number" 
-                                        className="bg-transparent w-20 text-right focus:outline-none"
-                                        value={exp.amount}
-                                        onChange={e => updateExpense(exp.id, 'amount', Number(e.target.value))}
-                                    />
+                
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                   <div className="space-y-4">
+                      <div>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Email Type</label>
+                         <select 
+                           className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
+                           value={aiEmailType}
+                           onChange={e => setAiEmailType(e.target.value)}
+                         >
+                            <option>Invoice Reminder</option>
+                            <option>Project Update</option>
+                            <option>Feedback Request</option>
+                            <option>Onboarding Welcome</option>
+                            <option>Task Completion Notice</option>
+                            <option>General Follow-up</option>
+                         </select>
+                      </div>
+                      <div>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Key Details / Context</label>
+                         <textarea 
+                           className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none h-32 text-sm"
+                           placeholder="e.g., Invoice #302 is 3 days overdue, total $500..."
+                           value={aiEmailContext}
+                           onChange={e => setAiEmailContext(e.target.value)}
+                         />
+                      </div>
+                      <button 
+                        onClick={handleGenerateEmail}
+                        disabled={isGenerating || !aiEmailContext}
+                        className="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                         {isGenerating ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Wand2 size={18}/>}
+                         Generate Draft
+                      </button>
+                   </div>
+                   
+                   <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 relative min-h-[300px]">
+                      {aiGeneratedEmail ? (
+                         <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                            <div>
+                               <label className="text-xs font-bold text-slate-400 uppercase">Subject</label>
+                               <div className="flex items-center gap-2">
+                                  <input className="w-full font-bold text-slate-800 bg-transparent border-none p-0 focus:ring-0" value={aiGeneratedEmail.subject} readOnly />
+                                  <button onClick={() => copyToClipboard(aiGeneratedEmail.subject)} className="text-slate-400 hover:text-indigo-600"><Copy size={14}/></button>
                                 </div>
                             </div>
-                            <input 
-                                className="w-full bg-transparent font-medium text-slate-800 focus:outline-none border-b border-transparent focus:border-slate-300 pb-1"
-                                value={exp.description}
-                                placeholder="Description"
-                                onChange={e => updateExpense(exp.id, 'description', e.target.value)}
-                            />
-                            <div className="flex justify-between items-center">
-                                <select 
-                                    value={exp.category}
-                                    onChange={e => updateExpense(exp.id, 'category', e.target.value)}
-                                    className="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-1 rounded border-none focus:ring-0"
-                                >
-                                    {expenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                                </select>
-                                <button onClick={() => deleteExpense(exp.id)} className="text-slate-300 hover:text-red-500 p-1">
-                                    <Trash2 size={16} />
-                                </button>
+                            <hr className="border-slate-200"/>
+                            <div>
+                               <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Body</label>
+                               <textarea className="w-full bg-transparent border-none p-0 text-sm text-slate-600 h-64 resize-none focus:ring-0" value={aiGeneratedEmail.body} readOnly />
+                               <button onClick={() => copyToClipboard(aiGeneratedEmail.body)} className="absolute bottom-4 right-4 bg-white shadow-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:text-indigo-600 hover:border-indigo-200 flex items-center gap-1">
+                                  <Copy size={14}/> Copy Body
+                               </button>
                             </div>
-                        </div>
-                    )) : <p className="p-6 text-center text-slate-400 text-sm">No expenses recorded.</p>}
-                </div>
-
-                {/* Desktop Table View */}
-                <div className="hidden lg:block overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 text-slate-500 font-medium">
-                            <tr>
-                                <th className="p-3">Date</th>
-                                <th className="p-3">Description</th>
-                                <th className="p-3">Category</th>
-                                <th className="p-3">Amount ($)</th>
-                                <th className="p-3 w-10"></th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {expenses.length > 0 ? expenses.map(exp => (
-                                <tr key={exp.id} className="hover:bg-slate-50">
-                                    <td className="p-3">
-                                        <input 
-                                            type="date" 
-                                            className="bg-transparent focus:outline-none"
-                                            value={exp.date}
-                                            onChange={e => updateExpense(exp.id, 'date', e.target.value)}
-                                        />
-                                    </td>
-                                    <td className="p-3">
-                                        <input 
-                                            className="w-full bg-transparent focus:outline-none"
-                                            value={exp.description}
-                                            placeholder="Description"
-                                            onChange={e => updateExpense(exp.id, 'description', e.target.value)}
-                                        />
-                                    </td>
-                                    <td className="p-3">
-                                        <select 
-                                            value={exp.category}
-                                            onChange={e => updateExpense(exp.id, 'category', e.target.value)}
-                                            className="bg-transparent border-none p-0 focus:ring-0 cursor-pointer"
-                                        >
-                                            {expenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                                        </select>
-                                    </td>
-                                    <td className="p-3">
-                                        <input 
-                                            type="number" 
-                                            className="bg-transparent focus:outline-none font-medium"
-                                            value={exp.amount}
-                                            onChange={e => updateExpense(exp.id, 'amount', Number(e.target.value))}
-                                        />
-                                    </td>
-                                    <td className="p-3 text-right">
-                                        <button onClick={() => deleteExpense(exp.id)} className="text-slate-300 hover:text-red-500">
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </td>
-                                </tr>
-                            )) : <tr><td colSpan={5} className="p-8 text-center text-slate-400">No expenses recorded.</td></tr>}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    );
-  };
-
-  const renderFeedback = () => {
-    if (isClient) {
-      return (
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 md:p-8 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-50 rounded-full text-emerald-600 mb-4">
-              <Briefcase size={32} />
-            </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">How is our collaboration?</h2>
-            <p className="text-slate-500 mb-8">Your feedback helps me improve our workflow and results.</p>
-            
-            <div className="flex justify-center gap-2 mb-6">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  onClick={() => setFeedbackRating(star)}
-                  className={`p-2 rounded-full transition-all ${feedbackRating >= star ? 'text-yellow-400 scale-110' : 'text-slate-200 hover:text-yellow-200'}`}
-                >
-                  <Star size={32} fill={feedbackRating >= star ? "currentColor" : "none"} />
-                </button>
-              ))}
-            </div>
-            
-            <textarea 
-              className="w-full border border-slate-200 rounded-xl p-4 mb-4 focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-none"
-              rows={4}
-              placeholder="Share your thoughts..."
-              value={feedbackComment}
-              onChange={(e) => setFeedbackComment(e.target.value)}
-            />
-            
-            <button 
-              onClick={handleSubmitFeedback}
-              className="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
-            >
-              Submit Feedback
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    // Admin View of Feedback
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-             <h3 className="text-sm font-bold text-slate-500 uppercase mb-2">Average Rating</h3>
-             <div className="flex items-end gap-2">
-               <span className="text-4xl font-bold text-slate-800">
-                 {feedback.length > 0 ? (feedback.reduce((acc, curr) => acc + curr.rating, 0) / feedback.length).toFixed(1) : 'N/A'}
-               </span>
-               <div className="flex pb-1 text-yellow-400">
-                 <Star fill="currentColor" size={20} />
-               </div>
-             </div>
-             <p className="text-xs text-slate-400 mt-1">Based on {feedback.length} reviews</p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-           <div className="p-4 border-b border-slate-200 bg-slate-50">
-             <h3 className="font-semibold text-slate-700">Client Feedback</h3>
-           </div>
-           <div className="divide-y divide-slate-100">
-             {feedback.length > 0 ? feedback.map(fb => {
-               const clientName = clients.find(c => c.id === fb.clientId)?.name || 'Unknown Client';
-               return (
-                 <div key={fb.id} className="p-6 hover:bg-slate-50">
-                   <div className="flex justify-between items-start mb-2">
-                     <div>
-                       <h4 className="font-semibold text-slate-800">{clientName}</h4>
-                       <p className="text-xs text-slate-400">{fb.date}</p>
-                     </div>
-                     <div className="flex text-yellow-400">
-                       {[...Array(5)].map((_, i) => (
-                         <Star key={i} size={14} fill={i < fb.rating ? "currentColor" : "none"} className={i < fb.rating ? "" : "text-slate-200"} />
-                       ))}
-                     </div>
+                         </div>
+                      ) : (
+                         <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center">
+                            <Bot size={48} className="mb-3 opacity-20"/>
+                            <p className="text-sm">Enter details and click generate to see the AI magic.</p>
+                         </div>
+                      )}
                    </div>
-                   <p className="text-slate-600 italic">"{fb.comment}"</p>
-                 </div>
-               )
-             }) : <p className="text-center py-12 text-slate-400">No feedback received yet.</p>}
-           </div>
-        </div>
-      </div>
-    );
-  };
-  
-  const renderAiComms = () => {
-    if (isClient) return null;
-
-    return (
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-           <div className="p-4 border-b border-slate-200 bg-slate-50">
-             <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Bot size={18}/> AI Email Studio</h3>
-           </div>
-           <div className="p-6 space-y-4">
-             <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email Type</label>
-                <select value={aiEmailType} onChange={e => setAiEmailType(e.target.value)} className="w-full border-slate-300 rounded-lg">
-                    <option>Invoice Reminder</option>
-                    <option>Project Update</option>
-                    <option>Welcome Email</option>
-                    <option>Feedback Request</option>
-                    <option>Meeting Follow-up</option>
-                </select>
+                </div>
              </div>
-             <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Additional Context</label>
-                <textarea 
-                    value={aiEmailContext} 
-                    onChange={e => setAiEmailContext(e.target.value)}
-                    rows={3}
-                    placeholder="e.g., Invoice #123 is overdue by 5 days. The project is 75% complete."
-                    className="w-full border-slate-300 rounded-lg"
-                />
-             </div>
-             <button onClick={handleGenerateEmail} disabled={isGenerating} className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
-                <Wand2 size={16} /> {isGenerating ? 'Generating...' : 'Generate Email'}
-             </button>
-           </div>
-        </div>
-
-        {aiGeneratedEmail && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-500">
-               <div className="p-4 border-b border-slate-200 bg-slate-50">
-                  <h3 className="font-semibold text-slate-700">Generated Content</h3>
-               </div>
-               <div className="p-6 space-y-4">
-                    <div>
-                        <label className="flex items-center justify-between text-sm font-medium text-slate-700 mb-1">
-                            Subject
-                            <button onClick={() => copyToClipboard(aiGeneratedEmail.subject)} className="text-xs flex items-center gap-1 text-slate-500 hover:text-emerald-600"><Copy size={12}/> Copy</button>
-                        </label>
-                        <div className="bg-slate-100 p-2 rounded-lg text-sm font-semibold">{aiGeneratedEmail.subject}</div>
-                    </div>
-                     <div>
-                        <label className="flex items-center justify-between text-sm font-medium text-slate-700 mb-1">
-                            Body
-                            <button onClick={() => copyToClipboard(aiGeneratedEmail.body)} className="text-xs flex items-center gap-1 text-slate-500 hover:text-emerald-600"><Copy size={12}/> Copy</button>
-                        </label>
-                        <div className="bg-slate-100 p-3 rounded-lg text-sm whitespace-pre-wrap h-64 overflow-y-auto">{aiGeneratedEmail.body}</div>
-                    </div>
-               </div>
-            </div>
-        )}
-      </div>
-    );
+          </div>
+      );
   };
-  
+
   const renderNotifications = () => {
-    if (!isClient) return null;
-    const clientNotifications = notifications
-        .filter(n => n.clientId === user.id)
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-    const markAllAsRead = () => {
-        const updated = notifications.map(n => n.clientId === user.id ? { ...n, isRead: true } : n);
-        setNotifications(updated);
-        dataService.saveNotifications(updated);
-    };
-
     return (
-        <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Bell size={18}/> Your Notifications</h3>
-                    {unreadCount > 0 && <button onClick={markAllAsRead} className="text-sm text-emerald-600 font-medium hover:underline">Mark all as read</button>}
-                </div>
-                <div className="divide-y divide-slate-100">
-                    {clientNotifications.length > 0 ? clientNotifications.map(n => (
-                        <div key={n.id} className={`p-4 flex items-start gap-4 transition-colors ${n.isRead ? 'bg-white' : 'bg-emerald-50'}`}>
-                            <div className={`mt-1 h-2 w-2 rounded-full ${n.isRead ? 'bg-transparent' : 'bg-emerald-500'}`}></div>
-                            <div className="flex-1">
-                                <p className="text-sm text-slate-700">{n.message}</p>
-                                <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleString()}</p>
-                            </div>
-                        </div>
-                    )) : <p className="p-8 text-center text-sm text-slate-400">You have no notifications.</p>}
-                </div>
-            </div>
-        </div>
-    );
-  }
-
-  const renderActivityFeed = () => {
-    if (isClient) return null;
-
-    const sortedNotifications = [...notifications].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-    return (
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Custom Notification Sender */}
+      <div className="max-w-2xl mx-auto">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="p-4 border-b border-slate-200 bg-slate-50">
-            <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Send size={18} /> Send Custom Notification</h3>
-          </div>
-          <div className="p-6 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Select Buyer (Client)</label>
-              <select
-                value={customNotificationClientId}
-                onChange={(e) => setCustomNotificationClientId(e.target.value)}
-                className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-emerald-500 focus:border-emerald-500"
-              >
-                {clients.map(client => (
-                  <option key={client.id} value={client.id}>{client.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Notification Message</label>
-              <textarea
-                rows={3}
-                className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-emerald-500 focus:border-emerald-500"
-                placeholder="Type your message here..."
-                value={customNotificationMessage}
-                onChange={(e) => setCustomNotificationMessage(e.target.value)}
-              />
-            </div>
-            <button
-              onClick={handleSendCustomNotification}
-              className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 transition-colors font-medium"
-            >
-              <Send size={16} /> Send to Client
-            </button>
-          </div>
-        </div>
-
-        {/* Activity Feed List */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-4 border-b border-slate-200 bg-slate-50">
-            <h3 className="font-semibold text-slate-700 flex items-center gap-2"><Bell size={18} /> Activity Feed</h3>
+             <h3 className="font-semibold text-slate-700">Notifications</h3>
           </div>
           <div className="divide-y divide-slate-100">
-            {sortedNotifications.length > 0 ? sortedNotifications.map(n => {
-              const client = clients.find(c => c.id === n.clientId);
-              return (
-                <div key={n.id} className="p-4 flex items-start gap-4 hover:bg-slate-50">
-                  <div className="mt-1 h-8 w-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 text-sm font-bold">
-                    {client?.name?.[0] || '?'}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-slate-800">
-                       {n.message}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      <span className="font-semibold">{client?.name || 'System'}</span> • {new Date(n.timestamp).toLocaleString()}
-                    </p>
-                  </div>
+             {notifications.filter(n => n.clientId === activeClientId).length > 0 ? (
+                notifications.filter(n => n.clientId === activeClientId).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map(n => (
+                   <div key={n.id} className={`p-4 ${!n.isRead ? 'bg-blue-50/50' : ''}`}>
+                      <div className="flex gap-3">
+                         <div className="mt-1 bg-blue-100 text-blue-600 p-2 rounded-full shrink-0 h-fit">
+                            <Bell size={16} />
+                         </div>
+                         <div>
+                            <p className="text-slate-800 text-sm">{n.message}</p>
+                            <p className="text-slate-400 text-xs mt-1">{new Date(n.timestamp).toLocaleString()}</p>
+                         </div>
+                      </div>
+                   </div>
+                ))
+             ) : (
+                <div className="p-8 text-center text-slate-400">
+                   <Bell size={32} className="mx-auto mb-2 opacity-20"/>
+                   <p>No notifications yet.</p>
                 </div>
-              );
-            }) : <p className="p-8 text-center text-sm text-slate-400">No activity yet.</p>}
+             )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderActivityFeed = () => {
+    // Custom Notification Sender Panel
+    const renderCustomSender = () => (
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Send size={18} className="text-indigo-600"/> Send Custom Notification</h3>
+        <div className="flex flex-col sm:flex-row gap-4 items-end">
+           <div className="w-full sm:w-1/3">
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">To Client</label>
+              <select 
+                className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none"
+                value={customNotificationClientId}
+                onChange={(e) => setCustomNotificationClientId(e.target.value)}
+              >
+                 {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+           </div>
+           <div className="w-full">
+               <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Message</label>
+               <input 
+                 className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                 placeholder="Type your message here..."
+                 value={customNotificationMessage}
+                 onChange={(e) => setCustomNotificationMessage(e.target.value)}
+               />
+           </div>
+           <button 
+             onClick={handleSendCustomNotification}
+             className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-medium text-sm transition-colors shrink-0"
+           >
+             Send
+           </button>
+        </div>
+      </div>
+    );
+
+    const allNotifications = notifications.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return (
+      <div className="max-w-3xl mx-auto">
+        {renderCustomSender()}
+
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+             <h3 className="font-semibold text-slate-700">Recent Activity</h3>
+             <span className="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full">{allNotifications.length} updates</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+             {allNotifications.length > 0 ? allNotifications.map(n => {
+               const clientName = clients.find(c => c.id === n.clientId)?.name || 'Unknown Client';
+               return (
+                   <div key={n.id} className="p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex gap-4">
+                         <div className="mt-1">
+                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs">
+                               {clientName.substring(0,2).toUpperCase()}
+                            </div>
+                         </div>
+                         <div className="flex-1">
+                            <div className="flex justify-between items-start">
+                               <p className="text-sm font-bold text-slate-700">{clientName}</p>
+                               <span className="text-xs text-slate-400 whitespace-nowrap ml-2">{new Date(n.timestamp).toLocaleString()}</span>
+                            </div>
+                            <p className="text-slate-600 text-sm mt-0.5">{n.message}</p>
+                         </div>
+                      </div>
+                   </div>
+               )
+             }) : (
+               <div className="p-12 text-center text-slate-400">
+                  <Bell size={48} className="mx-auto mb-3 opacity-20"/>
+                  <p>No activity recorded yet.</p>
+               </div>
+             )}
           </div>
         </div>
       </div>
@@ -2578,59 +2556,38 @@ const App: React.FC = () => {
   };
 
   const renderSettings = () => {
-    if (isClient) return null;
-
-    return (
-      <div className="max-w-2xl mx-auto">
-         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-4 border-b border-slate-200 bg-slate-50">
-               <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                  <Settings size={18} /> App Settings
-               </h3>
-            </div>
-            <div className="p-6 space-y-6">
-               <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Site Name / Branding</label>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                     <input 
-                       type="text" 
-                       className="flex-1 border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                       value={settings.siteName}
-                       onChange={(e) => {
-                          const newSettings = { ...settings, siteName: e.target.value };
-                          setSettings(newSettings);
-                          dataService.saveSettings(newSettings);
-                       }}
-                     />
-                     <button className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium text-sm hover:bg-slate-200">
-                        Save Automatically
-                     </button>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-2">This name will appear on the login screen and dashboard header.</p>
-               </div>
-
-               <div className="pt-6 border-t border-slate-100">
-                  <h4 className="text-sm font-medium text-red-600 mb-2">Danger Zone</h4>
-                  <button 
-                    onClick={() => {
-                      if(confirm("Are you sure you want to clear ALL data? This cannot be undone.")) {
-                        localStorage.clear();
-                        window.location.reload();
-                      }
+     return (
+        <div className="max-w-xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+           <div className="p-6 border-b border-slate-200">
+              <h2 className="text-xl font-bold text-slate-800">App Settings</h2>
+           </div>
+           <div className="p-6 space-y-6">
+              <div>
+                 <label className="block text-sm font-medium text-slate-700 mb-1">Site / Application Name</label>
+                 <input 
+                    className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                    value={settings.siteName}
+                    onChange={(e) => {
+                       const newSettings = { ...settings, siteName: e.target.value };
+                       setSettings(newSettings);
+                       dataService.saveSettings(newSettings);
                     }}
-                    className="w-full sm:w-auto border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm hover:bg-red-50"
-                  >
-                     Reset Application Data
-                  </button>
-               </div>
-            </div>
-         </div>
-      </div>
-    )
-  }
+                 />
+                 <p className="text-xs text-slate-500 mt-1">This name appears in the browser tab and sidebar.</p>
+              </div>
+              <div className="pt-4 border-t border-slate-100">
+                 <button onClick={handleLogout} className="text-red-600 hover:text-red-700 font-medium text-sm flex items-center gap-2">
+                    <LogOut size={16} /> Sign Out Admin
+                 </button>
+              </div>
+           </div>
+        </div>
+     );
+  };
 
+  // --- Main Layout Return ---
   return (
-    <div className="flex min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900">
       <Sidebar 
         currentView={currentView} 
         setCurrentView={setCurrentView} 
@@ -2644,64 +2601,69 @@ const App: React.FC = () => {
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 flex-shrink-0">
-          <div className="flex items-center gap-2 md:gap-4">
-            <button onClick={() => setIsMobileOpen(true)} className="lg:hidden text-slate-500 hover:text-slate-700 p-1">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 shadow-sm z-10 shrink-0">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setIsMobileOpen(true)} className="lg:hidden text-slate-500 hover:text-slate-700">
               <Menu size={24} />
             </button>
-            {!isClient && currentView !== 'settings' && (
-               <ClientSelector 
-                 clients={clients}
-                 activeClientId={activeClientId}
-                 setActiveClientId={setActiveClientId}
-                 onAddClient={handleAddClient}
-               />
-            )}
-            {isClient && (
-               <div className="flex items-center gap-2 text-slate-600 font-medium">
-                  <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 shrink-0">
-                     {user.name?.[0] || 'C'}
-                  </div>
-                  <span className="hidden sm:inline text-sm md:text-base truncate max-w-[150px]">Hello, {user.name}</span>
-               </div>
-            )}
+            <h2 className="text-lg font-bold text-slate-800 hidden sm:block">
+              {currentView === 'dashboard' ? 'Overview' : 
+               currentView === 'google' ? 'Google Reviews' :
+               currentView === 'trustpilot' ? 'Trustpilot Reviews' :
+               currentView === 'payments' ? 'Payments & Finance' :
+               currentView === 'gmail' ? 'Gmail Inventory' : 
+               currentView === 'address' ? 'Address Book' :
+               currentView === 'tasks' ? 'Task Manager' :
+               currentView === 'expenses' ? 'Expenses' :
+               currentView === 'feedback' ? 'Feedback' :
+               currentView === 'portfolio' ? 'Portfolio' :
+               currentView === 'ai_comms' ? 'AI Communications' :
+               currentView === 'notifications' ? 'Notifications' :
+               currentView === 'activity_feed' ? 'Activity Feed' :
+               'Settings'}
+            </h2>
           </div>
-          <div className="flex items-center gap-2">
-             {!isClient && (
-               <button 
-                 onClick={() => setCurrentView('settings')}
-                 className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-colors"
-                 title="Settings"
-               >
-                 <Settings size={20} />
-               </button>
-             )}
-             <button 
-               onClick={handleLogout}
-               className="flex items-center gap-2 text-slate-500 hover:text-red-600 px-2 md:px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors text-sm font-medium"
-             >
-               <LogOut size={18} />
-               <span className="hidden sm:inline">Sign Out</span>
-             </button>
+
+          <div className="flex items-center gap-3 sm:gap-4">
+             {/* Client Selector (Admin Only) */}
+            {!isClient && (
+              <ClientSelector 
+                clients={clients} 
+                activeClientId={activeClientId} 
+                setActiveClientId={setActiveClientId} 
+                onAddClient={handleAddClient} 
+              />
+            )}
+
+            {/* Logout Button */}
+            <button 
+              onClick={handleLogout}
+              className="p-2 text-slate-400 hover:text-red-500 transition-colors rounded-full hover:bg-red-50"
+              title="Logout"
+            >
+              <LogOut size={20} />
+            </button>
           </div>
         </header>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-100">
-          {currentView === 'dashboard' && renderDashboard()}
-          {currentView === 'portfolio' && renderPortfolio()}
-          {currentView === 'google' && renderGoogleReviews()}
-          {currentView === 'trustpilot' && renderTrustpilotReviews()}
-          {currentView === 'payments' && renderPayments()}
-          {currentView === 'gmail' && renderGmails()}
-          {currentView === 'address' && renderAddresses()}
-          {currentView === 'tasks' && renderTasks()}
-          {currentView === 'expenses' && renderExpenses()}
-          {currentView === 'feedback' && renderFeedback()}
-          {currentView === 'settings' && renderSettings()}
-          {currentView === 'ai_comms' && renderAiComms()}
-          {currentView === 'notifications' && renderNotifications()}
-          {currentView === 'activity_feed' && renderActivityFeed()}
+        {/* Content Area */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50">
+          <div className="max-w-7xl mx-auto h-full">
+            {currentView === 'dashboard' && renderDashboard()}
+            {currentView === 'portfolio' && renderPortfolio()}
+            {currentView === 'google' && renderGoogleReviews()}
+            {currentView === 'trustpilot' && renderTrustpilotReviews()}
+            {currentView === 'payments' && renderPayments()}
+            {currentView === 'gmail' && renderGmails()}
+            {currentView === 'address' && renderAddresses()}
+            {currentView === 'tasks' && renderTasks()}
+            {currentView === 'expenses' && renderExpenses()}
+            {currentView === 'feedback' && renderFeedback()}
+            {currentView === 'ai_comms' && renderAIComms()}
+            {currentView === 'notifications' && renderNotifications()}
+            {currentView === 'activity_feed' && renderActivityFeed()}
+            {currentView === 'settings' && renderSettings()}
+          </div>
         </main>
       </div>
     </div>
