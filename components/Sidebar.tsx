@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Star, ShieldCheck, CreditCard, Mail, MapPin, Menu, X, CheckSquare, DollarSign, MessageSquareHeart, Briefcase, Bot, Bell } from 'lucide-react';
+import { LayoutDashboard, Star, ShieldCheck, CreditCard, Mail, MapPin, Menu, X, CheckSquare, DollarSign, MessageSquareHeart, Briefcase, Bot, Bell, BrainCircuit } from 'lucide-react';
 import { ViewState } from '../types';
 
 interface SidebarProps {
@@ -30,6 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, i
   : [
       { id: 'dashboard' as ViewState, label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
       { id: 'activity_feed' as ViewState, label: 'Activity Feed', icon: <Bell size={20} />, badge: adminUnreadCount > 0 ? adminUnreadCount : 0 },
+      { id: 'ai_insights' as ViewState, label: 'AI Insights', icon: <BrainCircuit size={20} /> },
       { id: 'tasks' as ViewState, label: 'Tasks', icon: <CheckSquare size={20} /> },
       { id: 'ai_comms' as ViewState, label: 'AI Email Studio', icon: <Bot size={20} /> },
       { id: 'portfolio' as ViewState, label: 'Portfolio', icon: <Briefcase size={20} /> },

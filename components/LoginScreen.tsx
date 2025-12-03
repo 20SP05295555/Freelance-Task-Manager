@@ -59,7 +59,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ clients, onLogin, site
         <div className="p-8">
           <div className="flex justify-center mb-6">
             <div className="bg-emerald-100 p-3 rounded-full">
-              <Lock className="w-8 h-8 text-emerald-600" />
+              <Lock className="w-8 h-8 text-emerald-600" aria-label="Secure Login" />
             </div>
           </div>
           <h2 className="text-2xl font-bold text-center text-slate-800 mb-2">{siteName}</h2>
@@ -67,8 +67,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ clients, onLogin, site
         </div>
 
         <div>
-          <div className="flex">
+          <div className="flex" role="tablist">
             <button
+              role="tab"
+              aria-selected={activeTab === 'admin'}
               onClick={() => {
                 setActiveTab('admin');
                 setAuthError('');
@@ -79,9 +81,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ clients, onLogin, site
                 : 'text-slate-500 hover:bg-slate-50'
               }`}
             >
-              <Shield size={16} /> Admin Login
+              <Shield size={16} aria-label="Admin Login" /> Admin Login
             </button>
             <button
+              role="tab"
+              aria-selected={activeTab === 'client'}
               onClick={() => {
                 setActiveTab('client');
                 setAuthError('');
@@ -92,7 +96,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ clients, onLogin, site
                 : 'text-slate-500 hover:bg-slate-50'
               }`}
             >
-              <User size={16} /> Client Login
+              <User size={16} aria-label="Client Login" /> Client Login
             </button>
           </div>
 
@@ -100,21 +104,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ clients, onLogin, site
             {activeTab === 'admin' ? (
               <form onSubmit={handleAdminSubmit} className="space-y-4 animate-in fade-in duration-300">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Admin PIN</label>
+                  <label htmlFor="admin-pin" className="block text-sm font-medium text-slate-700 mb-1">Admin PIN</label>
                   <input
+                    id="admin-pin"
                     type="password"
                     inputMode="numeric"
                     autoComplete="off"
                     maxLength={6}
                     required
+                    aria-required="true"
                     className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-center text-lg tracking-[8px] font-mono"
                     value={adminPin}
                     onChange={(e) => setAdminPin(e.target.value)}
                     placeholder="••••••"
                     autoFocus
+                    aria-describedby={authError ? "admin-auth-error" : undefined}
                   />
                 </div>
-                {authError && <p className="text-red-500 text-sm text-center">{authError}</p>}
+                {authError && (
+                  <p id="admin-auth-error" role="alert" aria-live="polite" className="text-red-500 text-sm text-center">
+                    {authError}
+                  </p>
+                )}
                 <button type="submit" className="w-full bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 font-medium transition-colors">
                   Unlock
                 </button>
@@ -122,12 +133,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ clients, onLogin, site
             ) : (
               <form onSubmit={handleClientSubmit} className="space-y-4 animate-in fade-in duration-300">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Your Name</label>
+                  <label htmlFor="client-select" className="block text-sm font-medium text-slate-700 mb-1">Your Name</label>
                    <select 
+                     id="client-select"
                      className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 bg-white"
                      value={selectedClientId}
                      onChange={(e) => setSelectedClientId(e.target.value)}
                      autoFocus
+                     required
+                     aria-required="true"
                    >
                      {activeClients.length > 0 ? (
                         activeClients.map(client => (
@@ -139,20 +153,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ clients, onLogin, site
                    </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Your PIN</label>
+                  <label htmlFor="client-pin" className="block text-sm font-medium text-slate-700 mb-1">Your PIN</label>
                   <input
+                    id="client-pin"
                     type="password"
                     inputMode="numeric"
                     autoComplete="off"
                     maxLength={6}
                     required
+                    aria-required="true"
                     className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 text-center text-lg tracking-[8px] font-mono"
                     value={clientPin}
                     onChange={(e) => setClientPin(e.target.value)}
                     placeholder="••••••"
+                    aria-describedby={authError ? "client-auth-error" : undefined}
                   />
                 </div>
-                {authError && <p className="text-red-500 text-sm text-center">{authError}</p>}
+                {authError && (
+                  <p id="client-auth-error" role="alert" aria-live="polite" className="text-red-500 text-sm text-center">
+                    {authError}
+                  </p>
+                )}
                 <button type="submit" className="w-full bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 font-medium transition-colors">
                   Sign In
                 </button>

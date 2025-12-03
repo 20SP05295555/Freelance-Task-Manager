@@ -2,10 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ClientSelector } from './components/ClientSelector';
 import { LoginScreen } from './components/LoginScreen';
-import { ViewState, Client, GoogleReview, TrustpilotReview, Payment, GmailAccount, Address, Task, Expense, ClientFeedback, AdvanceTransaction, AdvanceType, TaskStatus, TaskPriority, PortfolioProfile, Project, AppSettings, Notification } from './types';
+import { ViewState, Client, GoogleReview, TrustpilotReview, Payment, GmailAccount, Address, Task, Expense, ClientFeedback, AdvanceTransaction, AdvanceType, TaskStatus, TaskPriority, PortfolioProfile, Project, AppSettings, Notification, ClientAnalysis } from './types';
 import { dataService } from './services/dataService';
-import { Menu, Plus, Trash2, Copy, Wand2, LogOut, UserCheck, Eye, EyeOff, Link as LinkIcon, Send, Lock, Mail, Star, CreditCard, Users, ShieldCheck, MapPin, CheckSquare, DollarSign, TrendingDown, TrendingUp, AlertCircle, Clock, ArrowRight, Briefcase, Edit3, Save, Globe, ExternalLink, X, Settings, AlertTriangle, Link2, UploadCloud, Bot, Bell, MessageSquareHeart } from 'lucide-react';
-import { generateReviewContent, generateEmailTemplate } from './services/geminiService';
+import { Menu, Plus, Trash2, Copy, Wand2, LogOut, UserCheck, Eye, EyeOff, Link as LinkIcon, Send, Lock, Mail, Star, CreditCard, Users, ShieldCheck, MapPin, CheckSquare, DollarSign, TrendingDown, TrendingUp, AlertCircle, Clock, ArrowRight, Briefcase, Edit3, Save, Globe, ExternalLink, X, Settings, AlertTriangle, Link2, UploadCloud, Bot, Bell, MessageSquareHeart, BrainCircuit, Sparkles, PieChart } from 'lucide-react';
+import { generateReviewContent, generateEmailTemplate, analyzeClientSentiment, generateSmartProjectPlan } from './services/geminiService';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 // --- Constants ---
@@ -33,37 +33,54 @@ const copyToClipboard = (text: string) => {
 };
 
 const App: React.FC = () => {
-  // --- Auth State ---
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [authError, setAuthError] = useState('');
+  // --- Synchronous Initialization (Fixes Data Loading Race Conditions) ---
   
-  // --- Invite/Setup State ---
+  // 1. Load Clients First
+  const [clients, setClients] = useState<Client[]>(() => dataService.getClients());
+
+  // 2. Load User Session
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    const stored = localStorage.getItem(AUTH_KEY);
+    return stored ? JSON.parse(stored) : null;
+  });
+
+  // 3. Determine Initial Active Client ID
+  const [activeClientId, setActiveClientId] = useState<string>(() => {
+    // If logged in as client, MUST use their ID
+    if (user?.role === 'client' && user.id) {
+        return user.id;
+    }
+    // If admin, try to restore or use first client
+    // (We could store admin's last selection, but defaulting to first is safe)
+    return clients.length > 0 ? clients[0].id : '';
+  });
+
+  // --- Other Data State ---
+  // Initialized lazily to avoid heavy parsing on every render if not needed, 
+  // though for this size app it's negligible.
+  const [googleReviews, setGoogleReviews] = useState<GoogleReview[]>(() => dataService.getGoogleReviews());
+  const [trustpilotReviews, setTrustpilotReviews] = useState<TrustpilotReview[]>(() => dataService.getTrustpilotReviews());
+  const [payments, setPayments] = useState<Payment[]>(() => dataService.getPayments());
+  const [advances, setAdvances] = useState<AdvanceTransaction[]>(() => dataService.getAdvances());
+  const [gmails, setGmails] = useState<GmailAccount[]>(() => dataService.getGmails());
+  const [addresses, setAddresses] = useState<Address[]>(() => dataService.getAddresses());
+  const [tasks, setTasks] = useState<Task[]>(() => dataService.getTasks());
+  const [expenses, setExpenses] = useState<Expense[]>(() => dataService.getExpenses());
+  const [feedback, setFeedback] = useState<ClientFeedback[]>(() => dataService.getFeedback());
+  const [notifications, setNotifications] = useState<Notification[]>(() => dataService.getNotifications());
+  const [portfolio, setPortfolio] = useState<PortfolioProfile | null>(() => dataService.getPortfolio());
+  const [settings, setSettings] = useState<AppSettings>(() => dataService.getSettings());
+  const [adminLastRead, setAdminLastRead] = useState<string>(() => dataService.getAdminLastRead());
+
+  // --- UI State ---
+  const [authError, setAuthError] = useState('');
   const [inviteClientId, setInviteClientId] = useState<string | null>(null);
   const [setupPin, setSetupPin] = useState('');
   const [setupConfirm, setSetupConfirm] = useState('');
-
-  // --- App State ---
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
-  const [activeClientId, setActiveClientId] = useState<string>(''); 
   const [paymentTab, setPaymentTab] = useState<'invoices' | 'advance'>('invoices');
-  const [adminLastRead, setAdminLastRead] = useState<string>('');
-
-  // --- Data State ---
-  const [clients, setClients] = useState<Client[]>([]);
-  const [googleReviews, setGoogleReviews] = useState<GoogleReview[]>([]);
-  const [trustpilotReviews, setTrustpilotReviews] = useState<TrustpilotReview[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [advances, setAdvances] = useState<AdvanceTransaction[]>([]);
-  const [gmails, setGmails] = useState<GmailAccount[]>([]);
-  const [addresses, setAddresses] = useState<Address[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [feedback, setFeedback] = useState<ClientFeedback[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [portfolio, setPortfolio] = useState<PortfolioProfile | null>(null);
-  const [settings, setSettings] = useState<AppSettings>({ siteName: "Freelance with Arpon Chakrabortty (Alex)" });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // No longer strictly needed for data, but kept for Invite checks
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
 
@@ -71,6 +88,11 @@ const App: React.FC = () => {
   const [aiEmailType, setAiEmailType] = useState('Invoice Reminder');
   const [aiEmailContext, setAiEmailContext] = useState('');
   const [aiGeneratedEmail, setAiGeneratedEmail] = useState<{subject: string, body: string} | null>(null);
+
+  // --- AI Insights State ---
+  const [analysisClientId, setAnalysisClientId] = useState<string>('');
+  const [clientAnalysis, setClientAnalysis] = useState<ClientAnalysis | null>(null);
+  const [smartPlanGoal, setSmartPlanGoal] = useState('');
 
   // --- Custom Notification State ---
   const [customNotificationClientId, setCustomNotificationClientId] = useState<string>('');
@@ -82,74 +104,45 @@ const App: React.FC = () => {
   // --- Feedback Form State ---
   const [feedbackRating, setFeedbackRating] = useState(5);
   const [feedbackComment, setFeedbackComment] = useState('');
+  
+  // --- Derived Constants ---
+  const isClient = user?.role === 'client';
+  
+  // CRITICAL: Always use the logged-in user's ID if they are a client.
+  // This overrides any potential state desync in activeClientId.
+  const effectiveClientId = isClient && user?.id ? user.id : activeClientId;
 
-  // --- Initialization ---
+  // --- Initialization Effects ---
   useEffect(() => {
-    // Load Data
-    const loadedClients = dataService.getClients();
-    setClients(loadedClients);
-    setGoogleReviews(dataService.getGoogleReviews());
-    setTrustpilotReviews(dataService.getTrustpilotReviews());
-    setPayments(dataService.getPayments());
-    setAdvances(dataService.getAdvances());
-    setGmails(dataService.getGmails());
-    setAddresses(dataService.getAddresses());
-    setTasks(dataService.getTasks());
-    setExpenses(dataService.getExpenses());
-    setFeedback(dataService.getFeedback());
-    setNotifications(dataService.getNotifications());
-    setPortfolio(dataService.getPortfolio());
-    setSettings(dataService.getSettings());
-    setAdminLastRead(dataService.getAdminLastRead());
-    
-    // Check Auth Session
-    const storedAuth = localStorage.getItem(AUTH_KEY);
-    if (storedAuth) {
-      const u = JSON.parse(storedAuth);
-      setUser(u);
-      // Correctly set active client if logged in as client
-      if (u.role === 'client' && u.id) {
-        setActiveClientId(u.id);
-      } else if (loadedClients.length > 0) {
-        setActiveClientId(loadedClients[0].id);
-      }
-    } else {
-      // Default for fresh admin load
-      if (loadedClients.length > 0) {
-        setActiveClientId(loadedClients[0].id);
-      }
-    }
-
     // Check URL for Invite
     const params = new URLSearchParams(window.location.search);
     const inviteId = params.get('invite');
     if (inviteId) {
-      const client = loadedClients.find(c => c.id === inviteId);
+      const client = clients.find(c => c.id === inviteId);
       if (client) {
         setInviteClientId(inviteId);
       }
     }
+  }, [clients]);
 
-    setLoading(false);
-  }, []);
-
-  // Ensure activeClientId is valid if clients change (Admin only mostly)
+  // Ensure activeClientId is valid if clients change (Admin only)
   useEffect(() => {
-    if (user?.role === 'client') return; // Don't auto-switch clients for client users
+    if (isClient) return; // Client ID is fixed to their user ID
     
     if (clients.length > 0 && !clients.find(c => c.id === activeClientId)) {
       setActiveClientId(clients[0].id);
     } else if (clients.length === 0) {
       setActiveClientId('');
     }
-  }, [clients, activeClientId, user]);
+  }, [clients, activeClientId, isClient]);
 
-  // Set default client for custom notification sender
+  // Set default client for custom notification sender and AI Analysis
   useEffect(() => {
-    if (clients.length > 0 && !clients.find(c => c.id === customNotificationClientId)) {
-        setCustomNotificationClientId(clients[0].id);
+    if (clients.length > 0) {
+       if (!clients.find(c => c.id === customNotificationClientId)) setCustomNotificationClientId(clients[0].id);
+       if (!clients.find(c => c.id === analysisClientId)) setAnalysisClientId(clients[0].id);
     }
-  }, [clients, customNotificationClientId]);
+  }, [clients, customNotificationClientId, analysisClientId]);
 
 
   // Update admin's last read timestamp when they view the feed
@@ -161,7 +154,7 @@ const App: React.FC = () => {
     }
   }, [currentView, user]);
 
-  // --- Derived State ---
+  // --- Derived State for Notifications ---
   const unreadCount = useMemo(() => {
     if (user?.role !== 'client') return 0;
     return notifications.filter(n => n.clientId === user.id && !n.isRead).length;
@@ -266,6 +259,7 @@ const App: React.FC = () => {
     setUser(null);
     localStorage.removeItem(AUTH_KEY);
     setCurrentView('dashboard');
+    // Don't need to reset data state, just user context
   };
 
   const generateInviteLink = (client: Client) => {
@@ -281,7 +275,7 @@ const App: React.FC = () => {
     if (!feedbackComment.trim()) return;
     const newFeedback: ClientFeedback = {
       id: Date.now().toString(),
-      clientId: activeClientId,
+      clientId: effectiveClientId,
       rating: feedbackRating,
       comment: feedbackComment,
       date: new Date().toISOString().split('T')[0]
@@ -291,10 +285,10 @@ const App: React.FC = () => {
     dataService.saveFeedback(updated);
     
     // Add notification for admin
-    const clientName = clients.find(c => c.id === activeClientId)?.name || 'A client';
+    const clientName = clients.find(c => c.id === effectiveClientId)?.name || 'A client';
     const newNotification: Notification = {
       id: (Date.now() + 1).toString(), // Ensure unique id
-      clientId: activeClientId,
+      clientId: effectiveClientId,
       message: `${clientName} submitted new feedback with a ${feedbackRating}-star rating.`,
       timestamp: new Date().toISOString(),
       isRead: false,
@@ -339,6 +333,51 @@ const App: React.FC = () => {
     setCustomNotificationMessage('');
     alert("Notification sent successfully!");
   };
+  
+  const handleAnalyzeClient = async () => {
+    if(!analysisClientId) return;
+    setIsGenerating(true);
+    const client = clients.find(c => c.id === analysisClientId);
+    
+    // Gather Data
+    const cReviews = [
+        ...googleReviews.filter(r => r.clientId === analysisClientId).map(r => r.content),
+        ...trustpilotReviews.filter(r => r.clientId === analysisClientId).map(r => r.content)
+    ];
+    const cFeedback = feedback.filter(f => f.clientId === analysisClientId).map(f => f.comment);
+    
+    const result = await analyzeClientSentiment(client?.name || "Client", cReviews, cFeedback);
+    setClientAnalysis(result);
+    setIsGenerating(false);
+  };
+
+  const handleGenerateSmartPlan = async () => {
+    if (!smartPlanGoal.trim()) return;
+    setIsGenerating(true);
+    const plan = await generateSmartProjectPlan(smartPlanGoal);
+    
+    // Convert to Tasks
+    const newTasks = plan.tasks.map(t => {
+        const date = new Date();
+        date.setDate(date.getDate() + t.daysFromNow);
+        return {
+            id: (Date.now() + Math.random()).toString(),
+            clientId: analysisClientId,
+            description: t.description,
+            priority: t.priority as TaskPriority,
+            status: 'Pending' as TaskStatus,
+            dueDate: date.toISOString().split('T')[0]
+        };
+    });
+    
+    const updated = [...tasks, ...newTasks];
+    setTasks(updated);
+    dataService.saveTasks(updated);
+    
+    setIsGenerating(false);
+    setSmartPlanGoal('');
+    alert(`Generated ${newTasks.length} tasks for the project!`);
+  };
 
   // --- Data Handlers ---
 
@@ -357,7 +396,7 @@ const App: React.FC = () => {
   };
 
   const updateClientEmail = (email: string) => {
-    const updated = clients.map(c => c.id === activeClientId ? { ...c, email } : c);
+    const updated = clients.map(c => c.id === effectiveClientId ? { ...c, email } : c);
     setClients(updated);
     dataService.saveClients(updated);
   };
@@ -487,16 +526,15 @@ const App: React.FC = () => {
   }
 
   // 3. Main App
-  const isClient = user.role === 'client';
-  const currentClient = clients.find(c => c.id === activeClientId);
+  const currentClient = clients.find(c => c.id === effectiveClientId);
 
   // --- Specific Render Helpers ---
 
   const renderDashboard = () => {
-    const clientReviews = googleReviews.filter(r => r.clientId === activeClientId);
-    const clientTrust = trustpilotReviews.filter(r => r.clientId === activeClientId);
-    const clientPayments = payments.filter(p => p.clientId === activeClientId);
-    const clientTasks = tasks.filter(t => t.clientId === activeClientId);
+    const clientReviews = googleReviews.filter(r => r.clientId === effectiveClientId);
+    const clientTrust = trustpilotReviews.filter(r => r.clientId === effectiveClientId);
+    const clientPayments = payments.filter(p => p.clientId === effectiveClientId);
+    const clientTasks = tasks.filter(t => t.clientId === effectiveClientId);
 
     const totalPaid = clientPayments.filter(p => p.status === 'Paid').reduce((acc, curr) => acc + curr.amount, 0);
     const pendingTasks = clientTasks.filter(t => t.status === 'Pending' || t.status === 'In Progress').length;
@@ -609,6 +647,120 @@ const App: React.FC = () => {
     );
   };
   
+  const renderAIInsights = () => {
+    return (
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
+           <div className="flex items-center gap-3 mb-2">
+              <BrainCircuit size={32} className="text-purple-200" />
+              <h2 className="text-2xl font-bold">AI Admin Insights</h2>
+           </div>
+           <p className="text-purple-100">Advanced analysis, sentiment tracking, and predictive planning powered by Gemini.</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+           {/* Column 1: Client Analysis */}
+           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><PieChart size={18} className="text-indigo-600"/> Client Health & Sentiment</h3>
+              
+              <div className="flex gap-2 mb-4">
+                 <select 
+                   className="flex-1 p-2 border rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-indigo-500"
+                   value={analysisClientId}
+                   onChange={e => setAnalysisClientId(e.target.value)}
+                 >
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                 </select>
+                 <button 
+                   onClick={handleAnalyzeClient}
+                   disabled={isGenerating || !analysisClientId}
+                   className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                 >
+                    {isGenerating ? 'Analyzing...' : 'Analyze'}
+                 </button>
+              </div>
+
+              {clientAnalysis ? (
+                 <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                    <div className="flex items-center justify-between bg-slate-50 p-4 rounded-xl">
+                       <div>
+                          <p className="text-xs text-slate-500 uppercase font-bold">Health Score</p>
+                          <div className="text-3xl font-bold text-slate-800">{clientAnalysis.healthScore}/100</div>
+                       </div>
+                       <div className={`px-3 py-1 rounded-full text-sm font-bold ${clientAnalysis.sentiment === 'Positive' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {clientAnalysis.sentiment}
+                       </div>
+                    </div>
+                    
+                    <div>
+                       <p className="text-xs text-slate-500 uppercase font-bold mb-2">Key Themes</p>
+                       <div className="flex flex-wrap gap-2">
+                          {clientAnalysis.keyThemes.map((theme, i) => (
+                             <span key={i} className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-xs font-medium border border-indigo-100">{theme}</span>
+                          ))}
+                       </div>
+                    </div>
+
+                    <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                       <p className="text-xs text-amber-600 uppercase font-bold mb-1">Retention Strategy</p>
+                       <p className="text-sm text-slate-700">{clientAnalysis.retentionStrategy}</p>
+                    </div>
+                    
+                    <div>
+                       <p className="text-xs text-slate-500 uppercase font-bold mb-1">Review Summary (Copy for Portfolio)</p>
+                       <div className="relative">
+                          <textarea className="w-full text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-200 h-24" readOnly value={clientAnalysis.reviewSummary} />
+                          <button onClick={() => copyToClipboard(clientAnalysis.reviewSummary)} className="absolute top-2 right-2 text-slate-400 hover:text-indigo-600"><Copy size={12}/></button>
+                       </div>
+                    </div>
+                 </div>
+              ) : (
+                 <div className="text-center py-10 text-slate-400">
+                    <Sparkles size={40} className="mx-auto mb-2 opacity-20"/>
+                    <p className="text-sm">Select a client and click Analyze to see insights.</p>
+                 </div>
+              )}
+           </div>
+
+           {/* Column 2: Smart Planner */}
+           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Wand2 size={18} className="text-emerald-600"/> Smart Task Planner</h3>
+              <p className="text-sm text-slate-500 mb-4">Enter a high-level goal, and AI will break it down into specific tasks with predicted priorities and due dates.</p>
+              
+              <div className="space-y-4">
+                 <textarea 
+                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 h-24 text-sm"
+                    placeholder="e.g., Launch a new 50-review campaign for HOB Furniture targeting London area..."
+                    value={smartPlanGoal}
+                    onChange={e => setSmartPlanGoal(e.target.value)}
+                 />
+                 <button 
+                   onClick={handleGenerateSmartPlan}
+                   disabled={isGenerating || !smartPlanGoal}
+                   className="w-full bg-emerald-600 text-white py-2.5 rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                 >
+                    {isGenerating ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Sparkles size={16}/>}
+                    Generate & Add Tasks
+                 </button>
+              </div>
+              
+              <div className="mt-6 pt-6 border-t border-slate-100">
+                 <h4 className="font-bold text-slate-700 text-sm mb-2">Recent Suggestions</h4>
+                 <div className="space-y-2">
+                    <div className="p-3 bg-slate-50 rounded border border-slate-100 text-xs text-slate-600">
+                       "Increase Trustpilot score to 4.8" &rarr; 4 Subtasks generated
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded border border-slate-100 text-xs text-slate-600">
+                       "Onboard new client TechCorp" &rarr; 6 Subtasks generated
+                    </div>
+                 </div>
+              </div>
+           </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderPortfolio = () => {
     if (!portfolio) return null;
 
@@ -826,12 +978,13 @@ const App: React.FC = () => {
   };
 
   const renderGoogleReviews = () => {
-    const clientReviews = googleReviews.filter(r => r.clientId === activeClientId);
+    // CRITICAL FIX: Use effectiveClientId to filter reviews
+    const clientReviews = googleReviews.filter(r => r.clientId === effectiveClientId);
 
     const addReview = () => {
       const newReview: GoogleReview = {
         id: Date.now().toString(),
-        clientId: activeClientId,
+        clientId: effectiveClientId,
         companyLink: '',
         content: '',
         star: 5,
@@ -1057,13 +1210,14 @@ const App: React.FC = () => {
   };
 
   const renderTrustpilotReviews = () => {
-    const clientReviews = trustpilotReviews.filter(r => r.clientId === activeClientId);
+    // CRITICAL FIX: Use effectiveClientId
+    const clientReviews = trustpilotReviews.filter(r => r.clientId === effectiveClientId);
 
     const addReview = () => {
       const today = new Date().toISOString().split('T')[0];
       const newReview: TrustpilotReview = {
         id: Date.now().toString(),
-        clientId: activeClientId,
+        clientId: effectiveClientId,
         link: '',
         title: '',
         content: '',
@@ -1321,14 +1475,15 @@ const App: React.FC = () => {
   };
 
   const renderPayments = () => {
-    const clientPayments = payments.filter(p => p.clientId === activeClientId);
-    const clientAdvances = advances.filter(a => a.clientId === activeClientId);
+    // CRITICAL FIX: Use effectiveClientId
+    const clientPayments = payments.filter(p => p.clientId === effectiveClientId);
+    const clientAdvances = advances.filter(a => a.clientId === effectiveClientId);
 
     // --- Regular Payment Logic ---
     const addPayment = () => {
       const newPayment: Payment = {
         id: Date.now().toString(),
-        clientId: activeClientId,
+        clientId: effectiveClientId,
         date: new Date().toISOString().split('T')[0],
         amount: 0,
         status: 'Unpaid',
@@ -1355,7 +1510,7 @@ const App: React.FC = () => {
     const addAdvance = (type: AdvanceType) => {
       const newAdv: AdvanceTransaction = {
         id: Date.now().toString(),
-        clientId: activeClientId,
+        clientId: effectiveClientId,
         date: new Date().toISOString().split('T')[0],
         amount: 0,
         type,
@@ -1634,12 +1789,13 @@ const App: React.FC = () => {
   };
 
   const renderGmails = () => {
-    const clientGmails = gmails.filter(g => g.clientId === activeClientId);
+    // CRITICAL FIX: Use effectiveClientId
+    const clientGmails = gmails.filter(g => g.clientId === effectiveClientId);
 
     const addGmail = () => {
       const newGmail: GmailAccount = {
         id: Date.now().toString(),
-        clientId: activeClientId,
+        clientId: effectiveClientId,
         email: '',
         oldPassword: '',
         newPassword: '',
@@ -1689,25 +1845,23 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                             
+                            <div>
+                                <label className="text-xs text-slate-500 font-medium uppercase">Password</label>
+                                <div className="flex items-center gap-2">
+                                    <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1 font-mono" value={gmail.newPassword || gmail.oldPassword} placeholder="Password" readOnly={isClient} onChange={e => updateGmail(gmail.id, 'newPassword', e.target.value)} />
+                                    <button onClick={() => copyToClipboard(gmail.newPassword || gmail.oldPassword || '')} className="text-slate-400 hover:text-emerald-600 p-2"><Copy size={16} /></button>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-500 font-medium uppercase">Recovery / 2FA</label>
+                                <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1" value={gmail.new2FA || gmail.old2FA} placeholder="Recovery Email or 2FA" readOnly={isClient} onChange={e => updateGmail(gmail.id, 'new2FA', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-500 font-medium uppercase">Backup Code</label>
+                                <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1 font-mono" value={gmail.backupCode} placeholder="Backup Code" readOnly={isClient} onChange={e => updateGmail(gmail.id, 'backupCode', e.target.value)} />
+                            </div>
                             {!isClient && (
-                              <>
-                                <div>
-                                    <label className="text-xs text-slate-500 font-medium uppercase">Password</label>
-                                    <div className="flex items-center gap-2">
-                                        <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1 font-mono" value={gmail.newPassword || gmail.oldPassword} placeholder="Password" onChange={e => updateGmail(gmail.id, 'newPassword', e.target.value)} />
-                                        <button onClick={() => copyToClipboard(gmail.newPassword || gmail.oldPassword || '')} className="text-slate-400 hover:text-emerald-600 p-2"><Copy size={16} /></button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-500 font-medium uppercase">Recovery / 2FA</label>
-                                    <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1" value={gmail.new2FA || gmail.old2FA} placeholder="Recovery Email or 2FA" onChange={e => updateGmail(gmail.id, 'new2FA', e.target.value)} />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-500 font-medium uppercase">Backup Code</label>
-                                    <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1 font-mono" value={gmail.backupCode} placeholder="Backup Code" onChange={e => updateGmail(gmail.id, 'backupCode', e.target.value)} />
-                                </div>
                                 <div className="flex justify-end pt-2"><button onClick={() => deleteGmail(gmail.id)} className="text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1 text-xs"><Trash2 size={16} /> Remove</button></div>
-                              </>
                             )}
                         </div>
                     ))}
@@ -1723,9 +1877,9 @@ const App: React.FC = () => {
             <thead className="bg-slate-50 text-slate-500 font-medium">
               <tr>
                 <th className="p-3">Email</th>
-                {!isClient && <th className="p-3">Password</th>}
-                {!isClient && <th className="p-3">Recovery / 2FA</th>}
-                {!isClient && <th className="p-3">Backup Code</th>}
+                <th className="p-3">Password</th>
+                <th className="p-3">Recovery / 2FA</th>
+                <th className="p-3">Backup Code</th>
                 {!isClient && <th className="p-3 w-10"></th>}
               </tr>
             </thead>
@@ -1746,46 +1900,47 @@ const App: React.FC = () => {
                       </button>
                     </div>
                   </td>
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      <input 
+                        className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none font-mono text-xs"
+                        value={gmail.newPassword || gmail.oldPassword}
+                        placeholder="Password"
+                        readOnly={isClient}
+                        onChange={e => updateGmail(gmail.id, 'newPassword', e.target.value)}
+                      />
+                      <button onClick={() => copyToClipboard(gmail.newPassword || gmail.oldPassword || '')} className="text-slate-300 hover:text-emerald-600">
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <input 
+                      className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none"
+                      value={gmail.new2FA || gmail.old2FA}
+                      placeholder="Recovery Email or 2FA"
+                      readOnly={isClient}
+                      onChange={e => updateGmail(gmail.id, 'new2FA', e.target.value)}
+                    />
+                  </td>
+                  <td className="p-3">
+                    <input 
+                      className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none font-mono text-xs"
+                      value={gmail.backupCode}
+                      placeholder="Backup Code"
+                      readOnly={isClient}
+                      onChange={e => updateGmail(gmail.id, 'backupCode', e.target.value)}
+                    />
+                  </td>
                   {!isClient && (
-                    <>
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <input 
-                            className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none font-mono text-xs"
-                            value={gmail.newPassword || gmail.oldPassword}
-                            placeholder="Password"
-                            onChange={e => updateGmail(gmail.id, 'newPassword', e.target.value)}
-                          />
-                          <button onClick={() => copyToClipboard(gmail.newPassword || gmail.oldPassword || '')} className="text-slate-300 hover:text-emerald-600">
-                            <Copy size={14} />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <input 
-                          className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none"
-                          value={gmail.new2FA || gmail.old2FA}
-                          placeholder="Recovery Email or 2FA"
-                          onChange={e => updateGmail(gmail.id, 'new2FA', e.target.value)}
-                        />
-                      </td>
-                      <td className="p-3">
-                        <input 
-                          className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none font-mono text-xs"
-                          value={gmail.backupCode}
-                          placeholder="Backup Code"
-                          onChange={e => updateGmail(gmail.id, 'backupCode', e.target.value)}
-                        />
-                      </td>
-                      <td className="p-3 text-right">
-                        <button 
-                          onClick={() => deleteGmail(gmail.id)}
-                          className="text-slate-300 hover:text-red-500"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </>
+                    <td className="p-3 text-right">
+                      <button 
+                        onClick={() => deleteGmail(gmail.id)}
+                        className="text-slate-300 hover:text-red-500"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
                   )}
                 </tr>
               ))}
@@ -1797,12 +1952,12 @@ const App: React.FC = () => {
   };
 
   const renderAddresses = () => {
-    const clientAddresses = addresses.filter(a => a.clientId === activeClientId);
+    const clientAddresses = addresses.filter(a => a.clientId === effectiveClientId);
 
     const addAddress = () => {
       const newAddr: Address = {
         id: Date.now().toString(),
-        clientId: activeClientId,
+        clientId: effectiveClientId,
         fullAddress: '',
         phone: '',
         invoiceNumber: ''
@@ -1886,13 +2041,14 @@ const App: React.FC = () => {
   };
 
   const renderTasks = () => {
-    const clientTasks = tasks.filter(t => t.clientId === activeClientId);
+    // CRITICAL FIX: Use effectiveClientId
+    const clientTasks = tasks.filter(t => t.clientId === effectiveClientId);
     
     // --- Task Actions ---
     const addTask = () => {
         const newTask: Task = {
             id: Date.now().toString(),
-            clientId: activeClientId,
+            clientId: effectiveClientId,
             description: 'New Task',
             dueDate: new Date().toISOString().split('T')[0],
             status: 'Pending',
@@ -2315,8 +2471,8 @@ const App: React.FC = () => {
                  {/* Past Feedback */}
                  <div className="space-y-4">
                     <h3 className="font-bold text-slate-700 px-2">Your Past Reviews</h3>
-                    {feedback.filter(f => f.clientId === activeClientId).length > 0 ? (
-                        feedback.filter(f => f.clientId === activeClientId).map(f => (
+                    {feedback.filter(f => f.clientId === effectiveClientId).length > 0 ? (
+                        feedback.filter(f => f.clientId === effectiveClientId).map(f => (
                             <div key={f.id} className="bg-white p-4 rounded-lg border border-slate-100 shadow-sm">
                                <div className="flex justify-between items-start mb-2">
                                   <div className="flex text-yellow-400">
@@ -2450,8 +2606,8 @@ const App: React.FC = () => {
              <h3 className="font-semibold text-slate-700">Notifications</h3>
           </div>
           <div className="divide-y divide-slate-100">
-             {notifications.filter(n => n.clientId === activeClientId).length > 0 ? (
-                notifications.filter(n => n.clientId === activeClientId).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map(n => (
+             {notifications.filter(n => n.clientId === effectiveClientId).length > 0 ? (
+                notifications.filter(n => n.clientId === effectiveClientId).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map(n => (
                    <div key={n.id} className={`p-4 ${!n.isRead ? 'bg-blue-50/50' : ''}`}>
                       <div className="flex gap-3">
                          <div className="mt-1 bg-blue-100 text-blue-600 p-2 rounded-full shrink-0 h-fit">
@@ -2618,6 +2774,7 @@ const App: React.FC = () => {
                currentView === 'feedback' ? 'Feedback' :
                currentView === 'portfolio' ? 'Portfolio' :
                currentView === 'ai_comms' ? 'AI Communications' :
+               currentView === 'ai_insights' ? 'AI Insights' :
                currentView === 'notifications' ? 'Notifications' :
                currentView === 'activity_feed' ? 'Activity Feed' :
                'Settings'}
@@ -2634,14 +2791,24 @@ const App: React.FC = () => {
                 onAddClient={handleAddClient} 
               />
             )}
+            
+            {isClient && currentClient && (
+                 <div className="hidden sm:flex items-center gap-2 text-sm text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
+                    <div className="w-6 h-6 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-bold text-xs">
+                        {currentClient.name.substring(0, 1)}
+                    </div>
+                    Hello, {currentClient.name}
+                 </div>
+            )}
 
             {/* Logout Button */}
             <button 
               onClick={handleLogout}
-              className="p-2 text-slate-400 hover:text-red-500 transition-colors rounded-full hover:bg-red-50"
+              className="flex items-center gap-2 text-slate-500 hover:text-red-500 transition-colors text-sm font-medium"
               title="Logout"
             >
-              <LogOut size={20} />
+              <LogOut size={18} />
+              <span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
         </header>
@@ -2660,6 +2827,7 @@ const App: React.FC = () => {
             {currentView === 'expenses' && renderExpenses()}
             {currentView === 'feedback' && renderFeedback()}
             {currentView === 'ai_comms' && renderAIComms()}
+            {currentView === 'ai_insights' && renderAIInsights()}
             {currentView === 'notifications' && renderNotifications()}
             {currentView === 'activity_feed' && renderActivityFeed()}
             {currentView === 'settings' && renderSettings()}

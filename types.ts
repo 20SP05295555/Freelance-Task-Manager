@@ -141,4 +141,20 @@ export interface Notification {
   taskId?: string;
 }
 
-export type ViewState = 'dashboard' | 'google' | 'trustpilot' | 'payments' | 'gmail' | 'address' | 'tasks' | 'expenses' | 'feedback' | 'portfolio' | 'settings' | 'ai_comms' | 'notifications' | 'activity_feed';
+export interface ClientAnalysis {
+  healthScore: number;
+  sentiment: string;
+  keyThemes: string[];
+  retentionStrategy: string;
+  reviewSummary: string;
+}
+
+export interface SmartTaskPlan {
+  tasks: {
+    description: string;
+    priority: TaskPriority;
+    daysFromNow: number;
+  }[];
+}
+
+export type ViewState = 'dashboard' | 'google' | 'trustpilot' | 'payments' | 'gmail' | 'address' | 'tasks' | 'expenses' | 'feedback' | 'portfolio' | 'settings' | 'ai_comms' | 'notifications' | 'activity_feed' | 'ai_insights';

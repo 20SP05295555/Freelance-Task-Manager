@@ -89,3 +89,99 @@ export const generateEmailTemplate = async (
     return { subject: "Generation Error", body: "Failed to generate email content. Please check the console for details." };
   }
 };
+
+export const analyzeClientSentiment = async (
+  clientName: string,
+  reviews: string[],
+  feedback: string[]
+): Promise<{ healthScore: number; sentiment: string; keyThemes: string[]; retentionStrategy: string; reviewSummary: string }> => {
+  if (!apiKey) return { healthScore: 0, sentiment: 'Error', keyThemes: [], retentionStrategy: 'API Key Missing', reviewSummary: '' };
+
+  try {
+    const prompt = `
+      Analyze the following data for client "${clientName}".
+      
+      Reviews they received (written by me/us): ${reviews.join(" | ")}
+      Feedback they gave me: ${feedback.join(" | ")}
+
+      1. Determine a "Client Health Score" (0-100) based on how happy they seem.
+      2. Identify 3 Key Themes in the relationship.
+      3. Suggest a 1-sentence retention strategy.
+      4. Write a "Marketing Summary" - a single paragraph combining the best parts of the reviews for a portfolio.
+
+      Return JSON.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            healthScore: { type: Type.NUMBER },
+            sentiment: { type: Type.STRING },
+            keyThemes: { type: Type.ARRAY, items: { type: Type.STRING } },
+            retentionStrategy: { type: Type.STRING },
+            reviewSummary: { type: Type.STRING }
+          },
+          required: ["healthScore", "sentiment", "keyThemes", "retentionStrategy", "reviewSummary"]
+        }
+      }
+    });
+
+    const text = response.text?.trim() || '{}';
+    return JSON.parse(text);
+  } catch (e) {
+    console.error(e);
+    return { healthScore: 50, sentiment: 'Neutral', keyThemes: ['Analysis Failed'], retentionStrategy: 'Try again later', reviewSummary: '' };
+  }
+};
+
+export const generateSmartProjectPlan = async (
+  goal: string
+): Promise<{ tasks: { description: string; priority: string; daysFromNow: number }[] }> => {
+  if (!apiKey) return { tasks: [] };
+
+  try {
+    const prompt = `
+      I am a freelancer. My client wants me to: "${goal}".
+      Break this down into 3-6 specific, actionable subtasks.
+      For each task, assign a priority (High, Medium, Low) and a "daysFromNow" (integer 0-14) representing when it should be due relative to today to ensure smooth progress.
+      
+      Return JSON.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            tasks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  description: { type: Type.STRING },
+                  priority: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
+                  daysFromNow: { type: Type.NUMBER }
+                },
+                required: ["description", "priority", "daysFromNow"]
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const text = response.text?.trim() || '{}';
+    return JSON.parse(text);
+  } catch (e) {
+    console.error(e);
+    return { tasks: [] };
+  }
+};
