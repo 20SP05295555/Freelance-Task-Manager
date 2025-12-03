@@ -105,12 +105,19 @@ const App: React.FC = () => {
     // Check Auth Session
     const storedAuth = localStorage.getItem(AUTH_KEY);
     if (storedAuth) {
-      setUser(JSON.parse(storedAuth));
-    }
-
-    if (loadedClients.length > 0) {
-      // Ensure activeClientId is valid
-      setActiveClientId(loadedClients[0].id);
+      const u = JSON.parse(storedAuth);
+      setUser(u);
+      // Correctly set active client if logged in as client
+      if (u.role === 'client' && u.id) {
+        setActiveClientId(u.id);
+      } else if (loadedClients.length > 0) {
+        setActiveClientId(loadedClients[0].id);
+      }
+    } else {
+      // Default for fresh admin load
+      if (loadedClients.length > 0) {
+        setActiveClientId(loadedClients[0].id);
+      }
     }
 
     // Check URL for Invite
@@ -126,14 +133,16 @@ const App: React.FC = () => {
     setLoading(false);
   }, []);
 
-  // Ensure activeClientId is valid if clients change
+  // Ensure activeClientId is valid if clients change (Admin only mostly)
   useEffect(() => {
+    if (user?.role === 'client') return; // Don't auto-switch clients for client users
+    
     if (clients.length > 0 && !clients.find(c => c.id === activeClientId)) {
       setActiveClientId(clients[0].id);
     } else if (clients.length === 0) {
       setActiveClientId('');
     }
-  }, [clients, activeClientId]);
+  }, [clients, activeClientId, user]);
 
   // Set default client for custom notification sender
   useEffect(() => {
@@ -175,6 +184,7 @@ const App: React.FC = () => {
         const adminUser: AuthUser = { role: 'admin', name: 'Admin' };
         setUser(adminUser);
         localStorage.setItem(AUTH_KEY, JSON.stringify(adminUser));
+        if (clients.length > 0) setActiveClientId(clients[0].id);
         return;
       }
     }
@@ -896,15 +906,19 @@ const App: React.FC = () => {
                                 <label className="text-xs text-slate-500 font-medium uppercase">Live Link</label>
                                 <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1" value={review.liveLink} placeholder="Paste Live URL" onChange={e => updateReview(review.id, 'liveLink', e.target.value)} />
                             </div>
-                            {!isClient && (
                             <div>
                                 <label className="text-xs text-slate-500 font-medium uppercase">Gmail Used</label>
                                 <div className="flex items-center gap-2">
-                                    <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1" value={review.gmailUsed || ''} placeholder="example@gmail.com" onChange={e => updateReview(review.id, 'gmailUsed', e.target.value)} />
+                                    <input 
+                                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1" 
+                                        value={review.gmailUsed || ''} 
+                                        placeholder="example@gmail.com" 
+                                        readOnly={isClient}
+                                        onChange={e => updateReview(review.id, 'gmailUsed', e.target.value)} 
+                                    />
                                     <button onClick={() => copyToClipboard(review.gmailUsed || '')} className="text-slate-400 hover:text-emerald-600 p-2"><Copy size={16} /></button>
                                 </div>
                             </div>
-                            )}
                             {!isClient && (
                                 <div className="flex justify-end pt-2"><button onClick={() => deleteReview(review.id)} className="text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1 text-xs"><Trash2 size={16} /> Remove</button></div>
                             )}
@@ -926,7 +940,7 @@ const App: React.FC = () => {
                 <th className="p-3">Link</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Live Link</th>
-                {!isClient && <th className="p-3">Gmail Used</th>}
+                <th className="p-3">Gmail Used</th>
                 {!isClient && <th className="p-3 w-10"></th>}
               </tr>
             </thead>
@@ -1006,13 +1020,13 @@ const App: React.FC = () => {
                      </div>
                   </td>
 
-                   {!isClient && (
                    <td className="p-3 align-top">
                      <div className="flex items-center gap-1">
                        <input 
                         className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none text-xs"
                         value={review.gmailUsed || ''}
                         placeholder="example@gmail.com"
+                        readOnly={isClient}
                         onChange={e => updateReview(review.id, 'gmailUsed', e.target.value)}
                       />
                       <button onClick={() => copyToClipboard(review.gmailUsed || '')} className="text-slate-400 hover:text-emerald-600">
@@ -1020,7 +1034,6 @@ const App: React.FC = () => {
                       </button>
                      </div>
                   </td>
-                  )}
 
                   {!isClient && (
                     <td className="p-3 align-top text-right">
@@ -1131,15 +1144,19 @@ const App: React.FC = () => {
                                 <label className="text-xs text-slate-500 font-medium uppercase">Live Link</label>
                                 <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1" value={review.liveLink} placeholder="Paste Live URL" onChange={e => updateReview(review.id, 'liveLink', e.target.value)} />
                             </div>
-                            {!isClient && (
                             <div>
                                 <label className="text-xs text-slate-500 font-medium uppercase">Gmail Used</label>
                                 <div className="flex items-center gap-2">
-                                    <input className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1" value={review.gmailUsed || ''} placeholder="example@gmail.com" onChange={e => updateReview(review.id, 'gmailUsed', e.target.value)} />
+                                    <input 
+                                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-emerald-500 mt-1" 
+                                        value={review.gmailUsed || ''} 
+                                        placeholder="example@gmail.com" 
+                                        readOnly={isClient}
+                                        onChange={e => updateReview(review.id, 'gmailUsed', e.target.value)} 
+                                    />
                                     <button onClick={() => copyToClipboard(review.gmailUsed || '')} className="text-slate-400 hover:text-emerald-600 p-2"><Copy size={16} /></button>
                                 </div>
                             </div>
-                            )}
                             {!isClient && (
                                 <div className="flex justify-end pt-2"><button onClick={() => deleteReview(review.id)} className="text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1 text-xs"><Trash2 size={16} /> Remove</button></div>
                             )}
@@ -1163,7 +1180,7 @@ const App: React.FC = () => {
                 <th className="p-3">Invoice #</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Live Link</th>
-                {!isClient && <th className="p-3">Gmail Used</th>}
+                <th className="p-3">Gmail Used</th>
                 {!isClient && <th className="p-3 w-10"></th>}
               </tr>
             </thead>
@@ -1248,13 +1265,13 @@ const App: React.FC = () => {
                      </div>
                   </td>
                   
-                   {!isClient && (
                    <td className="p-3 align-top">
                      <div className="flex items-center gap-1">
                        <input 
                         className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none text-xs"
                         value={review.gmailUsed || ''}
                         placeholder="example@gmail.com"
+                        readOnly={isClient}
                         onChange={e => updateReview(review.id, 'gmailUsed', e.target.value)}
                       />
                        <button onClick={() => copyToClipboard(review.gmailUsed || '')} className="text-slate-400 hover:text-emerald-600">
@@ -1262,7 +1279,6 @@ const App: React.FC = () => {
                       </button>
                      </div>
                   </td>
-                  )}
 
                   {!isClient && (
                     <td className="p-3 align-top text-right">
