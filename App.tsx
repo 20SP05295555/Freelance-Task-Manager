@@ -84,6 +84,10 @@ const App: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
 
+  // --- Updating State Tracking ---
+  // Tracks which specific item and field is currently being updated for visual feedback
+  const [updatingField, setUpdatingField] = useState<{id: string, field: string} | null>(null);
+
   // --- AI Comms State
   const [aiEmailType, setAiEmailType] = useState('Invoice Reminder');
   const [aiEmailContext, setAiEmailContext] = useState('');
@@ -1001,9 +1005,13 @@ const App: React.FC = () => {
     };
 
     const updateReview = (id: string, field: keyof GoogleReview, value: any) => {
+      // Show updating indicator
+      setUpdatingField({id, field});
       const updated = googleReviews.map(r => r.id === id ? { ...r, [field]: value } : r);
       setGoogleReviews(updated);
       dataService.saveGoogleReviews(updated);
+      // Clear updating indicator after a brief moment
+      setTimeout(() => setUpdatingField(null), 500);
     };
 
     const generateAI = async (id: string, company: string) => {
@@ -1041,11 +1049,19 @@ const App: React.FC = () => {
                                 </div>
                                 <div className="text-right shrink-0">
                                     <label className="text-xs text-slate-500 font-medium uppercase block mb-1">Status</label>
-                                    <select value={review.status} onChange={e => updateReview(review.id, 'status', e.target.value)} className={`text-xs font-medium px-2 py-1.5 rounded-full border-none focus:ring-0 cursor-pointer ${ review.status === 'Live' ? 'bg-emerald-100 text-emerald-700' : review.status === 'Drop' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600' }`}>
-                                        <option value="Pending">Pending</option>
-                                        <option value="Live">Live</option>
-                                        <option value="Drop">Drop</option>
-                                    </select>
+                                    <div className="relative inline-block">
+                                      <select value={review.status} onChange={e => updateReview(review.id, 'status', e.target.value)} className={`text-xs font-medium px-2 py-1.5 rounded-full border-none focus:ring-0 cursor-pointer transition-all duration-300 ${ updatingField?.id === review.id && updatingField?.field === 'status' ? 'ring-2 ring-blue-400 ring-offset-1' : '' } ${ review.status === 'Live' ? 'bg-emerald-100 text-emerald-700' : review.status === 'Drop' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600' }`}>
+                                          <option value="Pending">Pending</option>
+                                          <option value="Live">Live</option>
+                                          <option value="Drop">Drop</option>
+                                      </select>
+                                      {updatingField?.id === review.id && updatingField?.field === 'status' && (
+                                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                          <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                                        </span>
+                                      )}
+                                    </div>
                                 </div>
                             </div>
                             <div>
@@ -1144,24 +1160,34 @@ const App: React.FC = () => {
                     )}
                   </td>
                   <td className="p-3 align-top">
-                    <select 
-                      value={review.status}
-                      onChange={e => updateReview(review.id, 'status', e.target.value)}
-                      className={`text-xs font-medium px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer ${
-                        review.status === 'Live' ? 'bg-emerald-100 text-emerald-700' :
-                        review.status === 'Drop' ? 'bg-red-100 text-red-700' :
-                        'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      <option value="Pending">Pending</option>
-                      <option value="Live">Live</option>
-                      <option value="Drop">Drop</option>
-                    </select>
+                    <div className="relative inline-block">
+                      <select
+                        value={review.status}
+                        onChange={e => updateReview(review.id, 'status', e.target.value)}
+                        className={`text-xs font-medium px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer transition-all duration-300 ${
+                          updatingField?.id === review.id && updatingField?.field === 'status' ? 'ring-2 ring-blue-400 ring-offset-1' : ''
+                        } ${
+                          review.status === 'Live' ? 'bg-emerald-100 text-emerald-700' :
+                          review.status === 'Drop' ? 'bg-red-100 text-red-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        <option value="Pending">Pending</option>
+                        <option value="Live">Live</option>
+                        <option value="Drop">Drop</option>
+                      </select>
+                      {updatingField?.id === review.id && updatingField?.field === 'status' && (
+                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                        </span>
+                      )}
+                    </div>
                   </td>
-                  
+
                    <td className="p-3 align-top">
                      <div className="flex items-center gap-1">
-                      <input 
+                      <input
                         className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none text-xs"
                         value={review.liveLink}
                         placeholder="Paste Live URL"
@@ -1237,9 +1263,13 @@ const App: React.FC = () => {
     };
 
     const updateReview = (id: string, field: keyof TrustpilotReview, value: any) => {
+      // Show updating indicator
+      setUpdatingField({id, field});
       const updated = trustpilotReviews.map(r => r.id === id ? { ...r, [field]: value } : r);
       setTrustpilotReviews(updated);
       dataService.saveTrustpilotReviews(updated);
+      // Clear updating indicator after a brief moment
+      setTimeout(() => setUpdatingField(null), 500);
     };
     
     const deleteReview = (id: string) => {
@@ -1271,11 +1301,19 @@ const App: React.FC = () => {
                                 </div>
                                 <div className="text-right shrink-0">
                                     <label className="text-xs text-slate-500 font-medium uppercase block mb-1">Status</label>
-                                    <select value={review.status} onChange={e => updateReview(review.id, 'status', e.target.value)} className={`text-xs font-medium px-2 py-1.5 rounded-full border-none focus:ring-0 cursor-pointer ${ review.status === 'Live' ? 'bg-emerald-100 text-emerald-700' : review.status === 'Drop' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600' }`}>
-                                        <option value="Pending">Pending</option>
-                                        <option value="Live">Live</option>
-                                        <option value="Drop">Drop</option>
-                                    </select>
+                                    <div className="relative inline-block">
+                                      <select value={review.status} onChange={e => updateReview(review.id, 'status', e.target.value)} className={`text-xs font-medium px-2 py-1.5 rounded-full border-none focus:ring-0 cursor-pointer transition-all duration-300 ${ updatingField?.id === review.id && updatingField?.field === 'status' ? 'ring-2 ring-blue-400 ring-offset-1' : '' } ${ review.status === 'Live' ? 'bg-emerald-100 text-emerald-700' : review.status === 'Drop' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600' }`}>
+                                          <option value="Pending">Pending</option>
+                                          <option value="Live">Live</option>
+                                          <option value="Drop">Drop</option>
+                                      </select>
+                                      {updatingField?.id === review.id && updatingField?.field === 'status' && (
+                                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                          <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                                        </span>
+                                      )}
+                                    </div>
                                 </div>
                             </div>
                             <div>
@@ -1409,24 +1447,34 @@ const App: React.FC = () => {
                     />
                   </td>
                   <td className="p-3 align-top">
-                    <select 
-                      value={review.status}
-                      onChange={e => updateReview(review.id, 'status', e.target.value)}
-                      className={`text-xs font-medium px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer ${
-                        review.status === 'Live' ? 'bg-emerald-100 text-emerald-700' :
-                        review.status === 'Drop' ? 'bg-red-100 text-red-700' :
-                        'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      <option value="Pending">Pending</option>
-                      <option value="Live">Live</option>
-                      <option value="Drop">Drop</option>
-                    </select>
+                    <div className="relative inline-block">
+                      <select
+                        value={review.status}
+                        onChange={e => updateReview(review.id, 'status', e.target.value)}
+                        className={`text-xs font-medium px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer transition-all duration-300 ${
+                          updatingField?.id === review.id && updatingField?.field === 'status' ? 'ring-2 ring-blue-400 ring-offset-1' : ''
+                        } ${
+                          review.status === 'Live' ? 'bg-emerald-100 text-emerald-700' :
+                          review.status === 'Drop' ? 'bg-red-100 text-red-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        <option value="Pending">Pending</option>
+                        <option value="Live">Live</option>
+                        <option value="Drop">Drop</option>
+                      </select>
+                      {updatingField?.id === review.id && updatingField?.field === 'status' && (
+                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                        </span>
+                      )}
+                    </div>
                   </td>
-                  
+
                    <td className="p-3 align-top">
                      <div className="flex items-center gap-1">
-                      <input 
+                      <input
                         className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none text-xs"
                         value={review.liveLink}
                         placeholder="Paste Live URL"
@@ -1439,10 +1487,10 @@ const App: React.FC = () => {
                       )}
                      </div>
                   </td>
-                  
+
                    <td className="p-3 align-top">
                      <div className="flex items-center gap-1">
-                       <input 
+                       <input
                         className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none text-xs"
                         value={review.gmailUsed || ''}
                         placeholder="example@gmail.com"
@@ -1495,11 +1543,15 @@ const App: React.FC = () => {
     };
 
     const updatePayment = (id: string, field: keyof Payment, value: any) => {
+      // Show updating indicator
+      setUpdatingField({id, field});
       const updated = payments.map(p => p.id === id ? { ...p, [field]: value } : p);
       setPayments(updated);
       dataService.savePayments(updated);
+      // Clear updating indicator after a brief moment
+      setTimeout(() => setUpdatingField(null), 500);
     };
-    
+
     const deletePayment = (id: string) => {
         const updated = payments.filter(p => p.id !== id);
         setPayments(updated);
@@ -1583,11 +1635,19 @@ const App: React.FC = () => {
                                     </div>
                                     <div className="text-right">
                                         <label className="text-xs text-slate-500 font-medium uppercase block mb-1">Status</label>
-                                        <select value={payment.status} disabled={isClient} onChange={e => updatePayment(payment.id, 'status', e.target.value)} className={`text-xs font-medium px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer ${ payment.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700' }`}>
-                                            <option value="Pending">Pending</option>
-                                            <option value="Paid">Paid</option>
-                                            <option value="Unpaid">Unpaid</option>
-                                        </select>
+                                        <div className="relative inline-block">
+                                          <select value={payment.status} disabled={isClient} onChange={e => updatePayment(payment.id, 'status', e.target.value)} className={`text-xs font-medium px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer transition-all duration-300 ${ updatingField?.id === payment.id && updatingField?.field === 'status' ? 'ring-2 ring-blue-400 ring-offset-1' : '' } ${ payment.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700' }`}>
+                                              <option value="Pending">Pending</option>
+                                              <option value="Paid">Paid</option>
+                                              <option value="Unpaid">Unpaid</option>
+                                          </select>
+                                          {updatingField?.id === payment.id && updatingField?.field === 'status' && (
+                                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                              <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                                            </span>
+                                          )}
+                                        </div>
                                     </div>
                                 </div>
                                 <div>
@@ -1650,23 +1710,33 @@ const App: React.FC = () => {
                         />
                       </td>
                       <td className="p-3">
-                         <select 
-                          value={payment.status}
-                          disabled={isClient}
-                          onChange={e => updatePayment(payment.id, 'status', e.target.value)}
-                          className={`text-xs font-medium px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer ${
-                            payment.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
-                            'bg-amber-100 text-amber-700'
-                          }`}
-                        >
-                          <option value="Pending">Pending</option>
-                          <option value="Paid">Paid</option>
-                          <option value="Unpaid">Unpaid</option>
-                        </select>
+                        <div className="relative inline-block">
+                          <select
+                            value={payment.status}
+                            disabled={isClient}
+                            onChange={e => updatePayment(payment.id, 'status', e.target.value)}
+                            className={`text-xs font-medium px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer transition-all duration-300 ${
+                              updatingField?.id === payment.id && updatingField?.field === 'status' ? 'ring-2 ring-blue-400 ring-offset-1' : ''
+                            } ${
+                              payment.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
+                              'bg-amber-100 text-amber-700'
+                            }`}
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="Paid">Paid</option>
+                            <option value="Unpaid">Unpaid</option>
+                          </select>
+                          {updatingField?.id === payment.id && updatingField?.field === 'status' && (
+                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       {!isClient && (
                         <td className="p-3 text-right">
-                          <button 
+                          <button
                             onClick={() => deletePayment(payment.id)}
                             className="text-slate-300 hover:text-red-500"
                           >
@@ -2064,26 +2134,32 @@ const App: React.FC = () => {
         if (isClient && !['status', 'description'].includes(field)) {
             return;
         }
-    
+
         const originalTask = tasks.find(t => t.id === id);
         if (!originalTask || originalTask[field] === value) {
             return;
         }
-        
+
+        // Show updating indicator
+        setUpdatingField({id, field});
+
         const updatedTasks = tasks.map(t => (t.id === id ? { ...t, [field]: value } : t));
         setTasks(updatedTasks);
         dataService.saveTasks(updatedTasks);
-    
+
+        // Clear updating indicator after a brief moment
+        setTimeout(() => setUpdatingField(null), 500);
+
         // Notification Logic
         let notificationMessage = '';
         const clientName = clients.find(c => c.id === originalTask.clientId)?.name || 'A client';
-    
+
         if (field === 'status') {
             notificationMessage = `Task "${originalTask.description}" status was updated to ${value}.`;
         } else if (field === 'description' && isClient) {
             notificationMessage = `${clientName} updated the description for task: "${originalTask.description}".`;
         }
-    
+
         if (notificationMessage) {
             const newNotification: Notification = {
                 id: Date.now().toString(),
@@ -2138,13 +2214,21 @@ const App: React.FC = () => {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         {dateStatus}
-                                        <select value={task.status} onChange={e => updateTask(task.id, 'status', e.target.value as TaskStatus)}
-                                            className={`text-xs font-semibold px-2 py-1.5 rounded-full border-none focus:ring-emerald-500 cursor-pointer ${ task.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : task.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : task.status === 'On Hold' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700' }`}>
-                                            <option value="Pending">Pending</option>
-                                            <option value="In Progress">In Progress</option>
-                                            <option value="Completed">Completed</option>
-                                            <option value="On Hold">On Hold</option>
-                                        </select>
+                                        <div className="relative inline-block">
+                                          <select value={task.status} onChange={e => updateTask(task.id, 'status', e.target.value as TaskStatus)}
+                                              className={`text-xs font-semibold px-2 py-1.5 rounded-full border-none focus:ring-emerald-500 cursor-pointer transition-all duration-300 ${ updatingField?.id === task.id && updatingField?.field === 'status' ? 'ring-2 ring-blue-400 ring-offset-1' : '' } ${ task.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : task.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : task.status === 'On Hold' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700' }`}>
+                                              <option value="Pending">Pending</option>
+                                              <option value="In Progress">In Progress</option>
+                                              <option value="Completed">Completed</option>
+                                              <option value="On Hold">On Hold</option>
+                                          </select>
+                                          {updatingField?.id === task.id && updatingField?.field === 'status' && (
+                                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                              <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                                            </span>
+                                          )}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 pt-2 border-t border-slate-100">
@@ -2291,7 +2375,7 @@ const App: React.FC = () => {
                                   <div className="flex flex-col md:flex-row gap-3 md:items-start justify-between mb-2">
                                       <div className="w-full">
                                         <div className="flex items-center gap-2">
-                                            <textarea 
+                                            <textarea
                                                 className={`font-medium text-slate-800 bg-transparent border-none focus:ring-0 p-0 w-full resize-none ${task.status === 'Completed' ? 'line-through text-slate-400' : ''}`}
                                                 value={task.description} rows={1}
                                                 onChange={e => updateTask(task.id, 'description', e.target.value)}
@@ -2301,27 +2385,43 @@ const App: React.FC = () => {
                                         {isBlocked && <div className="flex items-start gap-1 text-amber-600 text-xs mt-1"><AlertTriangle size={12} className="mt-0.5 shrink-0"/><span>Waiting for: {blockingTasks.map(t => t.description).join(', ')}</span></div>}
                                       </div>
                                       <div className="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto shrink-0">
-                                          <select value={task.status} onChange={e => updateTask(task.id, 'status', e.target.value as TaskStatus)}
-                                              className={`text-xs font-semibold px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer ${ task.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : task.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : task.status === 'On Hold' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700' }`}>
-                                              <option value="Pending">Pending</option><option value="In Progress">In Progress</option><option value="Completed">Completed</option><option value="On Hold">On Hold</option>
-                                          </select>
-                                          
-                                          <select value={task.priority} onChange={e => updateTask(task.id, 'priority', e.target.value as TaskPriority)}
-                                              className={`text-xs font-bold px-2 py-1 rounded border-none focus:ring-0 cursor-pointer ${ task.priority === 'High' ? 'text-red-600 bg-red-50' : task.priority === 'Medium' ? 'text-amber-600 bg-amber-50' : 'text-slate-500 bg-slate-100'}`}>
-                                              <option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option>
-                                          </select>
+                                          <div className="relative inline-block">
+                                            <select value={task.status} onChange={e => updateTask(task.id, 'status', e.target.value as TaskStatus)}
+                                                className={`text-xs font-semibold px-2 py-1 rounded-full border-none focus:ring-0 cursor-pointer transition-all duration-300 ${ updatingField?.id === task.id && updatingField?.field === 'status' ? 'ring-2 ring-blue-400 ring-offset-1' : '' } ${ task.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : task.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : task.status === 'On Hold' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700' }`}>
+                                                <option value="Pending">Pending</option><option value="In Progress">In Progress</option><option value="Completed">Completed</option><option value="On Hold">On Hold</option>
+                                            </select>
+                                            {updatingField?.id === task.id && updatingField?.field === 'status' && (
+                                              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          <div className="relative inline-block">
+                                            <select value={task.priority} onChange={e => updateTask(task.id, 'priority', e.target.value as TaskPriority)}
+                                                className={`text-xs font-bold px-2 py-1 rounded border-none focus:ring-0 cursor-pointer transition-all duration-300 ${ updatingField?.id === task.id && updatingField?.field === 'priority' ? 'ring-2 ring-blue-400 ring-offset-1' : '' } ${ task.priority === 'High' ? 'text-red-600 bg-red-50' : task.priority === 'Medium' ? 'text-amber-600 bg-amber-50' : 'text-slate-500 bg-slate-100'}`}>
+                                                <option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option>
+                                            </select>
+                                            {updatingField?.id === task.id && updatingField?.field === 'priority' && (
+                                              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                                              </span>
+                                            )}
+                                          </div>
                                       </div>
                                   </div>
-                                  
+
                                   <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mt-2">
                                       <div className="flex items-center gap-1">
                                           <Clock size={12}/>
                                           <input type="date" className="bg-transparent border-none p-0 text-xs focus:ring-0 text-slate-500" value={task.dueDate} onChange={e => updateTask(task.id, 'dueDate', e.target.value)} />
                                       </div>
-                                      
+
                                       <div className="flex items-center gap-1">
                                           <Link2 size={12}/>
-                                          <select 
+                                          <select
                                               className="bg-transparent border-none p-0 text-xs focus:ring-0 text-slate-500 max-w-[150px] truncate"
                                               onChange={(e) => {
                                                   if(e.target.value) addDependency(task.id, e.target.value);
@@ -2720,15 +2820,25 @@ const App: React.FC = () => {
            <div className="p-6 space-y-6">
               <div>
                  <label className="block text-sm font-medium text-slate-700 mb-1">Site / Application Name</label>
-                 <input 
-                    className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                    value={settings.siteName}
-                    onChange={(e) => {
-                       const newSettings = { ...settings, siteName: e.target.value };
-                       setSettings(newSettings);
-                       dataService.saveSettings(newSettings);
-                    }}
-                 />
+                 <div className="relative">
+                   <input
+                      className={`w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all duration-300 ${updatingField?.id === 'settings' && updatingField?.field === 'siteName' ? 'ring-2 ring-blue-400' : ''}`}
+                      value={settings.siteName}
+                      onChange={(e) => {
+                         setUpdatingField({id: 'settings', field: 'siteName'});
+                         const newSettings = { ...settings, siteName: e.target.value };
+                         setSettings(newSettings);
+                         dataService.saveSettings(newSettings);
+                         setTimeout(() => setUpdatingField(null), 500);
+                      }}
+                   />
+                   {updatingField?.id === 'settings' && updatingField?.field === 'siteName' && (
+                     <span className="absolute top-1/2 right-3 -translate-y-1/2 flex h-3 w-3">
+                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                       <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                     </span>
+                   )}
+                 </div>
                  <p className="text-xs text-slate-500 mt-1">This name appears in the browser tab and sidebar.</p>
               </div>
               <div className="pt-4 border-t border-slate-100">
